@@ -53,7 +53,7 @@ variable "proxmox_ssh_private_key_file" {
 
 variable "proxmox_ssh_nodes" {
   description = "Optionales Override der SSH-Adressen einzelner Nodes (falls DNS-Namen nicht aufloesbar sind)."
-  type        = list(object({
+  type = list(object({
     name    = string
     address = string
     port    = optional(number, 22)
@@ -92,7 +92,7 @@ variable "image_catalog" {
 
 variable "vm_defaults" {
   description = "Vorgabewerte fuer alle VMs. Pro VM in var.vms einzeln uebersteuerbar."
-  type        = object({
+  type = object({
     node_name       = string
     image           = optional(string, "debian-12")
     datastore_id    = optional(string, "local-lvm")

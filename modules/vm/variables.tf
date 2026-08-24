@@ -109,7 +109,7 @@ variable "disk_ssd" {
 
 variable "extra_disks" {
   description = "Weitere Datendisks."
-  type        = list(object({
+  type = list(object({
     interface    = string
     size         = number
     datastore_id = optional(string)
@@ -163,7 +163,7 @@ variable "agent_timeout" {
 
 variable "network_devices" {
   description = "Netzwerkkarten der VM."
-  type        = list(object({
+  type = list(object({
     bridge      = optional(string, "vmbr0")
     model       = optional(string, "virtio")
     vlan_id     = optional(number)
@@ -176,7 +176,7 @@ variable "network_devices" {
 
 variable "ip_configs" {
   description = "cloud-init IP-Konfiguration je Netzwerkkarte. 'dhcp' oder CIDR (z. B. '192.168.1.10/24')."
-  type        = list(object({
+  type = list(object({
     ipv4_address = optional(string, "dhcp")
     ipv4_gateway = optional(string)
     ipv6_address = optional(string)
@@ -245,8 +245,8 @@ variable "cloud_init_snippet" {
     false = nur die native cloud-init Konfiguration ueber die API (Benutzer + Keys),
             ohne Paketinstallation.
   EOT
-  type    = bool
-  default = true
+  type        = bool
+  default     = true
 }
 
 variable "snippet_datastore_id" {
