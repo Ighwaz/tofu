@@ -151,9 +151,7 @@ locals {
   # Templates, die OpenTofu selbst herunterladen soll - wie bei den Cloud-Images
   # pro Node/Template-Kombination einmal.
   template_downloads = {
-    for key in distinct([
-      for name, ct in local.containers : "${ct.node_name}|${ct.template}" if ct.template != null
-    ]) : key => {
+    for key in distinct([for name, ct in local.containers : "${ct.node_name}|${ct.template}" if ct.template != null]) : key => {
       node_name = split("|", key)[0]
       template  = split("|", key)[1]
       known     = contains(keys(var.template_catalog), split("|", key)[1])
