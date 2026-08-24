@@ -1,0 +1,128 @@
+###############################################################################
+# Kopieren nach terraform.tfvars und anpassen.
+# Achtung: terraform.tfvars ist per .gitignore ausgeschlossen.
+###############################################################################
+
+proxmox_endpoint = "https://pve.example.com:8006/"
+
+# Empfohlen: API-Token statt Passwort.
+# Erzeugen z. B. mit:
+#   pveum user add tofu@pve
+#   pveum aclmod / -user tofu@pve -role PVEAdmin
+#   pveum user token add tofu@pve provider --privsep 0
+# proxmox_api_token wird besser als Umgebungsvariable gesetzt:
+#   export TF_VAR_proxmox_api_token='tofu@pve!provider=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+# proxmox_api_token = "tofu@pve!provider=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Selbstsigniertes PVE-Zertifikat:
+proxmox_insecure = true
+
+# SSH wird fuer den Upload der cloud-init Snippets gebraucht.
+proxmox_ssh_username = "root"
+proxmox_ssh_agent    = true
+# proxmox_ssh_private_key_file = "~/.ssh/id_ed25519"
+
+# Datastore fuer die heruntergeladenen Cloud-Images (Content-Type "iso").
+image_datastore_id = "local"
+
+###############################################################################
+# Vorgaben fuer alle VMs
+###############################################################################
+
+vm_defaults = {
+  node_name    = "pve"       # Name des PVE-Nodes
+  image        = "debian-12" # Default-Image
+  datastore_id = "local-lvm" # Storage fuer die VM-Disks
+
+  cpu_cores = 2
+  memory    = 2048
+  disk_size = 20
+
+  username = "tofu"
+  ssh_public_keys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@workstation",
+  ]
+
+  # Snippets muessen auf dem Datastore aktiviert sein:
+  #   Datacenter -> Storage -> local -> Content -> "Snippets"
+  cloud_init_snippet   = true
+  snippet_datastore_id = "local"
+
+  network_devices = [{ bridge = "vmbr0" }]
+  ip_configs      = [{ ipv4_address = "dhcp" }]
+  # dns_servers = ["192.168.1.1"]
+  # dns_domain  = "lan"
+}
+
+###############################################################################
+# Die einzelnen VMs
+###############################################################################
+
+vms = {
+  # Debian 12 mit DHCP
+  "debian-test" = {
+    image     = "debian-12"
+    cpu_cores = 2
+    memory    = 2048
+    disk_size = 20
+    tags      = ["opentofu", "debian"]
+  }
+
+  # Ubuntu 24.04 mit fester IP und eigener VMID
+  "ubuntu-web" = {
+    image     = "ubuntu-24.04"
+    vm_id     = 1201
+    cpu_cores = 4
+    memory    = 4096
+    disk_size = 40
+    tags      = ["opentofu", "ubuntu", "web"]
+
+    ip_configs = [{
+      ipv4_address = "192.168.1.50/24"
+      ipv4_gateway = "192.168.1.1"
+    }]
+
+    dns_servers = ["192.168.1.1"]
+    dns_domain  = "lan"
+
+    packages        = ["qemu-guest-agent", "curl", "vim"]
+    package_upgrade = true
+  }
+
+  # Ubuntu 22.04 auf einem anderen Node, mit zusaetzlicher Datendisk und VLAN
+  # "ubuntu-db" = {
+  #   node_name = "pve2"
+  #   image     = "ubuntu-22.04"
+  #   cpu_cores = 4
+  #   memory    = 8192
+  #   disk_size = 30
+  #
+  #   extra_disks = [{
+  #     interface    = "scsi1"
+  #     size         = 100
+  #     datastore_id = "local-lvm"
+  #   }]
+  #
+  #   network_devices = [{
+  #     bridge  = "vmbr0"
+  #     vlan_id = 20
+  #   }]
+  # }
+}
+
+###############################################################################
+# Eigene Images ergaenzen (optional)
+###############################################################################
+
+# image_catalog = {
+#   "ubuntu-25.04" = {
+#     url       = "https://cloud-images.ubuntu.com/plucky/current/plucky-server-cloudimg-amd64.img"
+#     file_name = "ubuntu-25.04-server-cloudimg-amd64.img"
+#   }
+#   "debian-12-pinned" = {
+#     url                = "https://cloud.debian.org/images/cloud/bookworm/20240701-1794/debian-12-genericcloud-amd64-20240701-1794.qcow2"
+#     file_name          = "debian-12-genericcloud-amd64-20240701-1794.img"
+#     checksum           = "<sha512-summe>"
+#     checksum_algorithm = "sha512"
+#   }
+# }

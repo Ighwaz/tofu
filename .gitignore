@@ -1,0 +1,20 @@
+# OpenTofu / Terraform
+.terraform/
+.terraform.tfstate.lock.info
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Variablen-Dateien enthalten Zugangsdaten - nur die *.example einchecken
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Plan-Dateien
+*.tfplan
+tfplan
+
+# Editor
+.vscode/
+.idea/
