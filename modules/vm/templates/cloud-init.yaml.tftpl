@@ -1,0 +1,41 @@
+#cloud-config
+hostname: ${jsonencode(hostname)}
+manage_etc_hosts: true
+preserve_hostname: false
+
+users:
+  - name: ${jsonencode(username)}
+    groups: [adm, sudo]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: ${password == null ? "true" : "false"}
+%{~ if length(ssh_public_keys) > 0 }
+    ssh_authorized_keys:
+%{~ for key in ssh_public_keys }
+      - ${jsonencode(key)}
+%{~ endfor }
+%{~ endif }
+
+%{~ if password != null }
+chpasswd:
+  expire: false
+  users:
+    - name: ${jsonencode(username)}
+      password: ${jsonencode(password)}
+      type: text
+ssh_pwauth: true
+%{~ endif }
+
+package_update: true
+package_upgrade: ${package_upgrade}
+%{~ if length(packages) > 0 }
+packages:
+%{~ for package in packages }
+  - ${jsonencode(package)}
+%{~ endfor }
+%{~ endif }
+
+runcmd:
+  - systemctl enable --now qemu-guest-agent || true
+
+final_message: "cloud-init fertig nach $UPTIME Sekunden"
