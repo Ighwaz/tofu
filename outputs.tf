@@ -22,5 +22,5 @@ output "vm_ipv4" {
 
 output "downloaded_images" {
   description = "Auf den Nodes bereitgestellte Cloud-Images."
-  value       = { for key, image in proxmox_virtual_environment_download_file.cloud_image : key => image.id }
+  value       = { for key, image in proxmox_download_file.cloud_image : key => image.id }
 }

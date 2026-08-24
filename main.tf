@@ -1,5 +1,5 @@
 # Cloud-Image je Node/Image-Kombination auf den PVE-Storage laden.
-resource "proxmox_virtual_environment_download_file" "cloud_image" {
+resource "proxmox_download_file" "cloud_image" {
   for_each = local.image_downloads
 
   content_type        = "iso"
@@ -29,7 +29,7 @@ module "vm" {
   description   = each.value.description
   tags          = each.value.tags
   pool_id       = each.value.pool_id
-  image_file_id = proxmox_virtual_environment_download_file.cloud_image["${each.value.node_name}|${each.value.image}"].id
+  image_file_id = proxmox_download_file.cloud_image["${each.value.node_name}|${each.value.image}"].id
 
   cpu_cores       = each.value.cpu_cores
   cpu_sockets     = each.value.cpu_sockets
