@@ -29,3 +29,9 @@ jobs:
           cd modules/vm
           tofu init -backend=false
           tofu validate
+
+      - name: tofu validate (modules/lxc)
+        run: |
+          cd modules/lxc
+          tofu init -backend=false
+          tofu validate

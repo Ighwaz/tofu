@@ -46,7 +46,7 @@ locals {
   # Pro VM die Defaults aus var.vm_defaults mit den VM-spezifischen Werten mischen.
   vms = {
     for name, vm in var.vms : name => {
-      node_name       = coalesce(vm.node_name, var.vm_defaults.node_name)
+      node_name       = coalesce(vm.node_name, var.vm_defaults.node_name, var.node_name)
       image           = coalesce(vm.image, var.vm_defaults.image)
       vm_id           = vm.vm_id
       description     = coalesce(vm.description, "Managed by OpenTofu")
@@ -98,6 +98,67 @@ locals {
       known     = contains(keys(local.image_catalog), split("|", key)[1])
 
       spec = lookup(local.image_catalog, split("|", key)[1], {
+        url                = ""
+        file_name          = ""
+        checksum           = ""
+        checksum_algorithm = ""
+      })
+    }
+  }
+
+  template_catalog = {
+    for tname, tpl in var.template_catalog : tname => {
+      url                = tpl.url
+      file_name          = coalesce(tpl.file_name, basename(tpl.url))
+      checksum           = coalesce(tpl.checksum, "")
+      checksum_algorithm = coalesce(tpl.checksum_algorithm, "")
+    }
+  }
+
+  # Pro Container die Defaults aus var.lxc_defaults mit den Container-Werten mischen.
+  containers = {
+    for name, ct in var.containers : name => {
+      node_name        = coalesce(ct.node_name, var.lxc_defaults.node_name, var.node_name)
+      template         = try(coalesce(ct.template, var.lxc_defaults.template), null)
+      template_file_id = try(coalesce(ct.template_file_id, var.lxc_defaults.template_file_id), null)
+      os_type          = coalesce(ct.os_type, var.lxc_defaults.os_type)
+      vm_id            = ct.vm_id
+      description      = coalesce(ct.description, "Managed by OpenTofu")
+      unprivileged     = coalesce(ct.unprivileged, var.lxc_defaults.unprivileged)
+      datastore_id     = coalesce(ct.datastore_id, var.lxc_defaults.datastore_id)
+      disk_size        = coalesce(ct.disk_size, var.lxc_defaults.disk_size)
+      cpu_cores        = coalesce(ct.cpu_cores, var.lxc_defaults.cpu_cores)
+      memory           = coalesce(ct.memory, var.lxc_defaults.memory)
+      swap             = coalesce(ct.swap, var.lxc_defaults.swap)
+      start_on_boot    = coalesce(ct.start_on_boot, var.lxc_defaults.start_on_boot)
+      started          = coalesce(ct.started, var.lxc_defaults.started)
+      protection       = coalesce(ct.protection, var.lxc_defaults.protection)
+      pool_id          = ct.pool_id
+      tags             = ct.tags == null ? var.lxc_defaults.tags : ct.tags
+      mount_points     = ct.mount_points
+
+      network_interfaces = ct.network_interfaces == null ? var.lxc_defaults.network_interfaces : ct.network_interfaces
+      ip_configs         = ct.ip_configs == null ? var.lxc_defaults.ip_configs : ct.ip_configs
+      dns_servers        = ct.dns_servers == null ? var.lxc_defaults.dns_servers : ct.dns_servers
+      dns_domain         = try(coalesce(ct.dns_domain, var.lxc_defaults.dns_domain), null)
+
+      ssh_public_keys = ct.ssh_public_keys == null ? var.lxc_defaults.ssh_public_keys : ct.ssh_public_keys
+      password        = try(coalesce(ct.password, var.lxc_defaults.password), null)
+      features        = ct.features == null ? var.lxc_defaults.features : ct.features
+    }
+  }
+
+  # Templates, die OpenTofu selbst herunterladen soll - wie bei den Cloud-Images
+  # pro Node/Template-Kombination einmal.
+  template_downloads = {
+    for key in distinct([
+      for name, ct in local.containers : "${ct.node_name}|${ct.template}" if ct.template != null
+    ]) : key => {
+      node_name = split("|", key)[0]
+      template  = split("|", key)[1]
+      known     = contains(keys(var.template_catalog), split("|", key)[1])
+
+      spec = lookup(local.template_catalog, split("|", key)[1], {
         url                = ""
         file_name          = ""
         checksum           = ""
