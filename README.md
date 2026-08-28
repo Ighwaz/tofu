@@ -1,8 +1,8 @@
 # OpenTofu für Proxmox VE
 
-Deployt Debian- und Ubuntu-VMs auf einer Proxmox-VE-Instanz — auf Basis offizieller
-Cloud-Images und cloud-init. VMs werden deklarativ in `terraform.tfvars` beschrieben,
-die passenden Images lädt OpenTofu automatisch auf den PVE-Storage.
+Deployt Debian- und Ubuntu-**VMs** (Cloud-Images + cloud-init) und **LXC-Container**
+auf einer Proxmox-VE-Instanz. Beides wird deklarativ in `terraform.tfvars` beschrieben;
+die passenden Images bzw. Templates lädt OpenTofu automatisch auf den PVE-Storage.
 
 Provider: [`bpg/proxmox`](https://search.opentofu.org/provider/bpg/proxmox/latest)
 
@@ -13,11 +13,14 @@ Provider: [`bpg/proxmox`](https://search.opentofu.org/provider/bpg/proxmox/lates
 ├── versions.tf              # OpenTofu- und Provider-Versionen, Backend-Vorlage
 ├── providers.tf             # Proxmox-Provider (API + SSH)
 ├── variables.tf             # Eingabevariablen
-├── locals.tf                # Image-Katalog, Zusammenführen der VM-Defaults
+├── locals.tf                # Image-/Template-Katalog, Zusammenführen der Defaults
 ├── main.tf                  # Image-Download + Aufruf des VM-Moduls je VM
+├── containers.tf            # Template-Download + Aufruf des LXC-Moduls je Container
 ├── outputs.tf               # VMIDs, IP-Adressen
 ├── terraform.tfvars.example # Beispielkonfiguration zum Kopieren
-└── modules/vm/              # Wiederverwendbares Modul für eine cloud-init-VM
+└── modules/
+    ├── vm/                  # Wiederverwendbares Modul für eine cloud-init-VM
+    └── lxc/                 # Wiederverwendbares Modul für einen LXC-Container
 ```
 
 ## Voraussetzungen auf dem Proxmox-Host
@@ -37,6 +40,7 @@ Provider: [`bpg/proxmox`](https://search.opentofu.org/provider/bpg/proxmox/lates
 
 3. **SSH-Zugriff auf die Nodes**: Der Provider lädt die cloud-init-user-data per SSH
    (`scp`) hoch. Ein SSH-Key für `root@<node>` im SSH-Agent reicht.
+   Punkt 2 und 3 gelten nur für VMs — LXC-Container brauchen weder Snippets noch SSH.
    Wer keine Snippets nutzen will, setzt `cloud_init_snippet = false` — dann läuft
    alles über die API, es werden aber **keine Pakete installiert** (auch kein
    `qemu-guest-agent`, dann zusätzlich `agent_enabled = false` setzen).
@@ -70,8 +74,9 @@ Jeder Eintrag in `vms` ist eine VM; der Key ist Name und Hostname. Alles, was do
 nicht gesetzt ist, kommt aus `vm_defaults`:
 
 ```hcl
+node_name = "pve" # Standard-Node für VMs und Container
+
 vm_defaults = {
-  node_name       = "pve"
   image           = "debian-12"
   datastore_id    = "local-lvm"
   cpu_cores       = 2
@@ -153,6 +158,90 @@ Ein Image wird pro Node einmal geladen, auf dem es gebraucht wird.
 | `bios`, `machine` | `seabios`/`ovmf`, z. B. `q35` | `seabios`, PVE-Default |
 | `agent_enabled`, `agent_timeout` | QEMU-Guest-Agent | `true`, `15m` |
 
+## LXC-Container definieren
+
+Container laufen über die gleiche Mechanik wie VMs: jeder Eintrag in `containers` ist
+ein Container, der Key ist Name und Hostname, nicht gesetzte Felder kommen aus
+`lxc_defaults`.
+
+```hcl
+lxc_defaults = {
+  cpu_cores       = 2
+  memory          = 512
+  disk_size       = 8
+  unprivileged    = true
+  ssh_public_keys = ["ssh-ed25519 AAAA... user@workstation"]
+}
+
+containers = {
+  "debian-ct" = {
+    template_file_id = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+    os_type          = "debian"
+  }
+
+  "ubuntu-ct" = {
+    template   = "ubuntu-24.04" # Eintrag aus var.template_catalog
+    os_type    = "ubuntu"
+    cpu_cores  = 2
+    memory     = 1024
+    disk_size  = 16
+    features   = { nesting = true } # z. B. für Docker im Container
+    ip_configs = [{ ipv4_address = "192.168.1.60/24", ipv4_gateway = "192.168.1.1" }]
+  }
+}
+```
+
+### Woher kommt das Template?
+
+Anders als bei den Cloud-Images gibt es für LXC-Templates **keine `latest`-URL** — die
+Dateinamen auf `download.proxmox.com` sind versioniert (`debian-12-standard_12.7-1_amd64.tar.zst`).
+Deshalb zwei Wege, beide pro Container wählbar:
+
+**A: Template liegt bereits auf dem Node** (der übliche Weg). Auf dem PVE-Host:
+
+```bash
+pveam update
+pveam available --section system          # zeigt die aktuellen Dateinamen
+pveam download local debian-12-standard_12.7-1_amd64.tar.zst
+```
+
+Dann im Container `template_file_id = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"`.
+
+**B: OpenTofu lädt das Template selbst.** Dazu die URL einmal in `template_catalog`
+eintragen und im Container per `template` referenzieren:
+
+```hcl
+template_catalog = {
+  "ubuntu-24.04" = {
+    url = "http://download.proxmox.com/images/system/ubuntu-24.04-standard_24.04-2_amd64.tar.zst"
+  }
+}
+```
+
+Ein Template wird — wie die Cloud-Images — pro Node einmal geladen, auf dem es
+gebraucht wird. Wird ein Container mit `template` angelegt, dessen Key nicht im
+Katalog steht, bricht der Plan mit einer entsprechenden Meldung ab.
+
+### Wichtige Optionen pro Container
+
+| Feld | Bedeutung | Default |
+| --- | --- | --- |
+| `node_name` | Ziel-Node | `var.node_name` |
+| `template` / `template_file_id` | Template aus dem Katalog oder direkte File-ID | – |
+| `os_type` | `debian`, `ubuntu`, `alpine`, ... | `debian` |
+| `unprivileged` | unprivilegierter Container | `true` |
+| `vm_id` | feste VMID | automatisch |
+| `cpu_cores` | CPU-Kerne | 2 |
+| `memory`, `swap` | RAM/Swap in MiB | 512 / 512 |
+| `disk_size`, `datastore_id` | Root-Filesystem | 8 GiB / `local-lvm` |
+| `mount_points` | zusätzliche Mounts (`path`, `size`, `volume`) | `[]` |
+| `features` | `nesting`, `fuse`, `keyctl`, `mount` | alles aus |
+| `network_interfaces` | Bridge, VLAN, MAC, MTU, Rate-Limit | `vmbr0` als `veth0` |
+| `ip_configs` | `dhcp` oder CIDR + Gateway | `dhcp` |
+| `dns_servers`, `dns_domain` | DNS | Node-Vorgabe |
+| `ssh_public_keys`, `password` | Login als `root` | Keys aus `lxc_defaults` |
+| `tags`, `pool_id`, `start_on_boot`, `started`, `protection` | PVE-Metadaten | `["opentofu"]`, –, `true`, `true`, `false` |
+
 ## Hinweise und Stolperfallen
 
 - **`disk_size` muss mindestens so groß sein wie das Image** (Debian ~2 GiB,
@@ -171,9 +260,23 @@ Ein Image wird pro Node einmal geladen, auf dem es gebraucht wird.
   Zugangsdaten — nicht einchecken (ist per `.gitignore` ausgeschlossen). Für den
   Mehrbenutzerbetrieb den Backend-Block in `versions.tf` ausfüllen.
 
-## Modul direkt verwenden
+Speziell für LXC:
 
-`modules/vm` lässt sich auch einzeln einbinden:
+- **Container haben kein cloud-init.** SSH-Keys und Passwort gehen direkt an `root`,
+  eine Paketinstallation beim ersten Start gibt es nicht — dafür sind sie in Sekunden
+  statt Minuten da.
+- **`features` wie `nesting` erfordern in der Regel `root@pam`.** Ein API-Token mit
+  PVEAdmin reicht dafür nicht; PVE lehnt das Setzen sonst ab.
+- **Kein Guest-Agent**, also auch keine per Agent gemeldete IP. Bei statischer IP steht
+  sie ohnehin in der Konfiguration, bei DHCP hilft die PVE-Oberfläche.
+- `disk_size` ist eine Zahl in GiB, die `size` eines `mount_points` dagegen ein String
+  mit Einheit (`"50G"`) — das gibt die Proxmox-API so vor.
+- Änderungen an `template`/`template_file_id`, `unprivileged` oder `datastore_id`
+  ersetzen den Container.
+
+## Module direkt verwenden
+
+`modules/vm` und `modules/lxc` lassen sich auch einzeln einbinden:
 
 ```hcl
 module "buildhost" {
@@ -186,6 +289,21 @@ module "buildhost" {
   cpu_cores       = 8
   memory          = 16384
   disk_size       = 100
+  ssh_public_keys = ["ssh-ed25519 AAAA..."]
+}
+```
+
+```hcl
+module "gitea" {
+  source = "./modules/lxc"
+
+  name             = "gitea"
+  node_name        = "pve"
+  template_file_id = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+
+  cpu_cores       = 2
+  memory          = 2048
+  disk_size       = 16
   ssh_public_keys = ["ssh-ed25519 AAAA..."]
 }
 ```

@@ -62,7 +62,16 @@ variable "proxmox_ssh_nodes" {
 }
 
 ###############################################################################
-# Cloud-Images
+# Allgemein
+###############################################################################
+
+variable "node_name" {
+  description = "Standard-PVE-Node fuer alle VMs und Container. Pro VM/Container oder ueber vm_defaults/lxc_defaults uebersteuerbar."
+  type        = string
+}
+
+###############################################################################
+# Cloud-Images (VMs)
 ###############################################################################
 
 variable "image_datastore_id" {
@@ -93,7 +102,7 @@ variable "image_catalog" {
 variable "vm_defaults" {
   description = "Vorgabewerte fuer alle VMs. Pro VM in var.vms einzeln uebersteuerbar."
   type = object({
-    node_name       = string
+    node_name       = optional(string)
     image           = optional(string, "debian-12")
     datastore_id    = optional(string, "local-lvm")
     cpu_cores       = optional(number, 2)
@@ -143,6 +152,7 @@ variable "vm_defaults" {
     cloud_init_snippet   = optional(bool, true)
     snippet_datastore_id = optional(string, "local")
   })
+  default = {}
 }
 
 variable "vms" {
@@ -213,6 +223,151 @@ variable "vms" {
 
     cloud_init_snippet   = optional(bool)
     snippet_datastore_id = optional(string)
+  }))
+  default = {}
+}
+
+###############################################################################
+# LXC-Templates
+###############################################################################
+
+variable "template_datastore_id" {
+  description = "Datastore fuer heruntergeladene LXC-Templates (Content-Type 'vztmpl'), z. B. 'local'."
+  type        = string
+  default     = "local"
+}
+
+variable "template_catalog" {
+  description = <<-EOT
+    LXC-Templates, die OpenTofu selbst herunterladen soll. Der Key wird in
+    var.containers[*].template referenziert. Fuer Templates, die bereits per
+    'pveam download' auf dem Node liegen, stattdessen template_file_id setzen.
+  EOT
+  type = map(object({
+    url                = string
+    file_name          = optional(string)
+    checksum           = optional(string)
+    checksum_algorithm = optional(string)
+  }))
+  default = {}
+}
+
+###############################################################################
+# LXC-Container
+###############################################################################
+
+variable "lxc_defaults" {
+  description = "Vorgabewerte fuer alle Container. Pro Container in var.containers einzeln uebersteuerbar."
+  type = object({
+    node_name        = optional(string)
+    template         = optional(string)
+    template_file_id = optional(string)
+    os_type          = optional(string, "debian")
+    unprivileged     = optional(bool, true)
+    datastore_id     = optional(string, "local-lvm")
+    disk_size        = optional(number, 8)
+    cpu_cores        = optional(number, 2)
+    memory           = optional(number, 512)
+    swap             = optional(number, 512)
+    start_on_boot    = optional(bool, true)
+    started          = optional(bool, true)
+    protection       = optional(bool, false)
+    tags             = optional(list(string), ["opentofu"])
+
+    network_interfaces = optional(list(object({
+      name        = optional(string)
+      bridge      = optional(string, "vmbr0")
+      vlan_id     = optional(number)
+      mac_address = optional(string)
+      mtu         = optional(number)
+      firewall    = optional(bool, false)
+      rate_limit  = optional(number)
+    })), [{}])
+
+    ip_configs = optional(list(object({
+      ipv4_address = optional(string, "dhcp")
+      ipv4_gateway = optional(string)
+      ipv6_address = optional(string)
+      ipv6_gateway = optional(string)
+    })), [{}])
+
+    dns_servers = optional(list(string), [])
+    dns_domain  = optional(string, null)
+
+    ssh_public_keys = optional(list(string), [])
+    password        = optional(string, null)
+
+    features = optional(object({
+      nesting = optional(bool, false)
+      fuse    = optional(bool, false)
+      keyctl  = optional(bool, false)
+      mount   = optional(list(string), [])
+    }), {})
+  })
+  default = {}
+}
+
+variable "containers" {
+  description = <<-EOT
+    Map der zu erstellenden LXC-Container. Key = Container-Name (auch Hostname).
+    Alle Felder sind optional; nicht gesetzte Felder kommen aus var.lxc_defaults.
+  EOT
+  type = map(object({
+    node_name        = optional(string)
+    template         = optional(string)
+    template_file_id = optional(string)
+    os_type          = optional(string)
+    vm_id            = optional(number)
+    description      = optional(string)
+    unprivileged     = optional(bool)
+    datastore_id     = optional(string)
+    disk_size        = optional(number)
+    cpu_cores        = optional(number)
+    memory           = optional(number)
+    swap             = optional(number)
+    start_on_boot    = optional(bool)
+    started          = optional(bool)
+    protection       = optional(bool)
+    pool_id          = optional(string)
+    tags             = optional(list(string))
+
+    mount_points = optional(list(object({
+      path      = string
+      size      = string
+      volume    = optional(string)
+      backup    = optional(bool, false)
+      read_only = optional(bool, false)
+    })), [])
+
+    network_interfaces = optional(list(object({
+      name        = optional(string)
+      bridge      = optional(string, "vmbr0")
+      vlan_id     = optional(number)
+      mac_address = optional(string)
+      mtu         = optional(number)
+      firewall    = optional(bool, false)
+      rate_limit  = optional(number)
+    })))
+
+    ip_configs = optional(list(object({
+      ipv4_address = optional(string, "dhcp")
+      ipv4_gateway = optional(string)
+      ipv6_address = optional(string)
+      ipv6_gateway = optional(string)
+    })))
+
+    dns_servers = optional(list(string))
+    dns_domain  = optional(string)
+
+    ssh_public_keys = optional(list(string))
+    password        = optional(string)
+
+    features = optional(object({
+      nesting = optional(bool, false)
+      fuse    = optional(bool, false)
+      keyctl  = optional(bool, false)
+      mount   = optional(list(string), [])
+    }))
   }))
   default = {}
 }

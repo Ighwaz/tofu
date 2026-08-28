@@ -25,12 +25,16 @@ proxmox_ssh_agent    = true
 # Datastore fuer die heruntergeladenen Cloud-Images (Content-Type "iso").
 image_datastore_id = "local"
 
+# Standard-Node fuer alle VMs und Container.
+node_name = "pve"
+
 ###############################################################################
 # Vorgaben fuer alle VMs
 ###############################################################################
 
 vm_defaults = {
-  node_name    = "pve"       # Name des PVE-Nodes
+  # node_name  = "pve2"      # nur noetig, wenn VMs auf einem anderen Node als
+  #                          # dem globalen node_name laufen sollen
   image        = "debian-12" # Default-Image
   datastore_id = "local-lvm" # Storage fuer die VM-Disks
 
@@ -126,3 +130,75 @@ vms = {
 #     checksum_algorithm = "sha512"
 #   }
 # }
+
+###############################################################################
+# LXC-Container
+###############################################################################
+
+# Vorgaben fuer alle Container
+lxc_defaults = {
+  datastore_id = "local-lvm"
+  cpu_cores    = 2
+  memory       = 512
+  swap         = 512
+  disk_size    = 8
+  unprivileged = true
+
+  ssh_public_keys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@workstation",
+  ]
+
+  network_interfaces = [{ bridge = "vmbr0" }]
+  ip_configs         = [{ ipv4_address = "dhcp" }]
+}
+
+# Templates, die OpenTofu selbst herunterladen soll. Die Dateinamen sind
+# versioniert - die aktuell verfuegbaren zeigt auf dem PVE-Host:
+#   pveam update && pveam available --section system
+#
+# template_catalog = {
+#   "debian-12" = {
+#     url = "http://download.proxmox.com/images/system/debian-12-standard_12.7-1_amd64.tar.zst"
+#   }
+#   "ubuntu-24.04" = {
+#     url = "http://download.proxmox.com/images/system/ubuntu-24.04-standard_24.04-2_amd64.tar.zst"
+#   }
+# }
+
+containers = {
+  # Variante A: Template liegt schon auf dem Node (pveam download local <datei>)
+  "debian-ct" = {
+    template_file_id = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+    os_type          = "debian"
+    cpu_cores        = 1
+    memory           = 512
+    disk_size        = 8
+    tags             = ["opentofu", "debian", "lxc"]
+  }
+
+  # Variante B: Template aus var.template_catalog, OpenTofu laedt es herunter
+  # "ubuntu-ct" = {
+  #   template  = "ubuntu-24.04"
+  #   os_type   = "ubuntu"
+  #   vm_id     = 1301
+  #   cpu_cores = 2
+  #   memory    = 1024
+  #   disk_size = 16
+  #
+  #   ip_configs = [{
+  #     ipv4_address = "192.168.1.60/24"
+  #     ipv4_gateway = "192.168.1.1"
+  #   }]
+  #
+  #   dns_servers = ["192.168.1.1"]
+  #
+  #   # nesting z. B. fuer Docker im Container
+  #   features = { nesting = true }
+  #
+  #   mount_points = [{
+  #     path   = "/mnt/data"
+  #     size   = "50G"
+  #     volume = "local-lvm"
+  #   }]
+  # }
+}

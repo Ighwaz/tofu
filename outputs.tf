@@ -24,3 +24,18 @@ output "downloaded_images" {
   description = "Auf den Nodes bereitgestellte Cloud-Images."
   value       = { for key, image in proxmox_download_file.cloud_image : key => image.id }
 }
+
+output "containers" {
+  description = "Uebersicht der erzeugten LXC-Container."
+  value = {
+    for name, ct in module.lxc : name => {
+      vm_id     = ct.vm_id
+      node_name = ct.node_name
+    }
+  }
+}
+
+output "downloaded_templates" {
+  description = "Auf den Nodes bereitgestellte LXC-Templates."
+  value       = { for key, template in proxmox_download_file.container_template : key => template.id }
+}
