@@ -113,18 +113,39 @@ variable "vm_defaults" {
     memory          = optional(number, 2048)
     memory_floating = optional(number, 0)
     disk_size       = optional(number, 20)
-    disk_interface  = optional(string, "virtio0")
+    disk_interface  = optional(string, "scsi0")
     disk_discard    = optional(string, "on")
     disk_iothread   = optional(bool, true)
-    disk_ssd        = optional(bool, false)
-    bios            = optional(string, "seabios")
-    machine         = optional(string, null)
-    on_boot         = optional(bool, true)
-    started         = optional(bool, true)
-    pool_id         = optional(string, null)
-    tags            = optional(list(string), ["opentofu"])
-    agent_enabled   = optional(bool, true)
-    agent_timeout   = optional(string, "15m")
+    disk_ssd        = optional(bool, true)
+    disk_aio        = optional(string, "io_uring")
+    disk_cache      = optional(string, "none")
+
+    # bigpool ist ZFS, dort nimmt PVE kein qcow2 an. Fuer ein dir-/NFS-Storage
+    # auf "qcow2" stellen, null laesst den Provider entscheiden.
+    disk_file_format = optional(string, "raw")
+
+    bios    = optional(string, "ovmf")
+    machine = optional(string, "q35")
+
+    # Nur mit virtio-scsi-single wirkt iothread je Disk einzeln.
+    scsi_hardware = optional(string, "virtio-scsi-single")
+
+    efi_disk_type              = optional(string, "4m")
+    efi_disk_pre_enrolled_keys = optional(bool, false)
+
+    tablet_device = optional(bool, false)
+    migrate       = optional(bool, false)
+    hotplug       = optional(string, "cpu,memory,network,disk,usb")
+
+    cpu_units     = optional(number, null)
+    cpu_numa      = optional(bool, true)
+    cpu_flags     = optional(list(string), [])
+    on_boot       = optional(bool, true)
+    started       = optional(bool, true)
+    pool_id       = optional(string, null)
+    tags          = optional(list(string), ["opentofu"])
+    agent_enabled = optional(bool, true)
+    agent_timeout = optional(string, "15m")
 
     network_devices = optional(list(object({
       bridge      = optional(string, "vmbr0")
@@ -133,6 +154,7 @@ variable "vm_defaults" {
       mac_address = optional(string)
       mtu         = optional(number)
       firewall    = optional(bool, false)
+      queues      = optional(number)
     })), [{}])
 
     ip_configs = optional(list(object({
@@ -163,38 +185,47 @@ variable "vms" {
     Alle Felder sind optional; nicht gesetzte Felder kommen aus var.vm_defaults.
   EOT
   type = map(object({
-    node_name       = optional(string)
-    image           = optional(string)
-    vm_id           = optional(number)
-    description     = optional(string)
-    datastore_id    = optional(string)
-    cpu_cores       = optional(number)
-    cpu_sockets     = optional(number)
-    cpu_type        = optional(string)
-    memory          = optional(number)
-    memory_floating = optional(number)
-    disk_size       = optional(number)
-    disk_interface  = optional(string)
-    disk_discard    = optional(string)
-    disk_iothread   = optional(bool)
-    disk_ssd        = optional(bool)
-    bios            = optional(string)
-    machine         = optional(string)
-    on_boot         = optional(bool)
-    started         = optional(bool)
-    pool_id         = optional(string)
-    tags            = optional(list(string))
-    agent_enabled   = optional(bool)
-    agent_timeout   = optional(string)
+    node_name        = optional(string)
+    image            = optional(string)
+    vm_id            = optional(number)
+    description      = optional(string)
+    datastore_id     = optional(string)
+    cpu_cores        = optional(number)
+    cpu_sockets      = optional(number)
+    cpu_type         = optional(string)
+    memory           = optional(number)
+    memory_floating  = optional(number)
+    disk_size        = optional(number)
+    disk_interface   = optional(string)
+    disk_discard     = optional(string)
+    disk_iothread    = optional(bool)
+    disk_ssd         = optional(bool)
+    disk_file_format = optional(string)
+    bios             = optional(string)
+    machine          = optional(string)
+    hotplug          = optional(string)
+    cpu_numa         = optional(bool)
+    cpu_flags        = optional(list(string))
+    on_boot          = optional(bool)
+    started          = optional(bool)
+    pool_id          = optional(string)
+    tags             = optional(list(string))
+    agent_enabled    = optional(bool)
+    agent_timeout    = optional(string)
 
+    # filesystem + mount gesetzt => cloud-init formatiert und haengt die
+    # Platte beim ersten Start ein. Ohne die beiden bleibt sie unformatiert.
     extra_disks = optional(list(object({
       interface    = string
       size         = number
       datastore_id = optional(string)
+      file_format  = optional(string)
       discard      = optional(string, "on")
       iothread     = optional(bool, true)
-      ssd          = optional(bool, false)
+      ssd          = optional(bool, true)
       backup       = optional(bool, true)
+      filesystem   = optional(string)
+      mount        = optional(string)
     })), [])
 
     network_devices = optional(list(object({
@@ -204,6 +235,7 @@ variable "vms" {
       mac_address = optional(string)
       mtu         = optional(number)
       firewall    = optional(bool, false)
+      queues      = optional(number)
     })))
 
     ip_configs = optional(list(object({

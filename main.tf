@@ -37,16 +37,30 @@ module "vm" {
   memory          = each.value.memory
   memory_floating = each.value.memory_floating
 
-  datastore_id   = each.value.datastore_id
-  disk_size      = each.value.disk_size
-  disk_interface = each.value.disk_interface
-  disk_discard   = each.value.disk_discard
-  disk_iothread  = each.value.disk_iothread
-  disk_ssd       = each.value.disk_ssd
-  extra_disks    = each.value.extra_disks
+  datastore_id     = each.value.datastore_id
+  disk_size        = each.value.disk_size
+  disk_interface   = each.value.disk_interface
+  disk_discard     = each.value.disk_discard
+  disk_iothread    = each.value.disk_iothread
+  disk_ssd         = each.value.disk_ssd
+  disk_file_format = each.value.disk_file_format
+  extra_disks      = each.value.extra_disks
+
+  # Global, nicht je VM: wer das einzeln braucht, setzt es im Modulaufruf.
+  disk_aio                   = var.vm_defaults.disk_aio
+  disk_cache                 = var.vm_defaults.disk_cache
+  scsi_hardware              = var.vm_defaults.scsi_hardware
+  efi_disk_type              = var.vm_defaults.efi_disk_type
+  efi_disk_pre_enrolled_keys = var.vm_defaults.efi_disk_pre_enrolled_keys
+  tablet_device              = var.vm_defaults.tablet_device
+  migrate                    = var.vm_defaults.migrate
+  cpu_units                  = var.vm_defaults.cpu_units
 
   bios          = each.value.bios
   machine       = each.value.machine
+  hotplug       = each.value.hotplug
+  cpu_numa      = each.value.cpu_numa
+  cpu_flags     = each.value.cpu_flags
   on_boot       = each.value.on_boot
   started       = each.value.started
   agent_enabled = each.value.agent_enabled

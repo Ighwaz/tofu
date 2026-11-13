@@ -35,6 +35,28 @@ packages:
 %{~ endfor }
 %{~ endif }
 
+%{~ if length(managed_disks) > 0 }
+# Zusatzplatten einrichten. `partition: none` legt das Dateisystem direkt auf
+# das Geraet, ohne Partitionstabelle - fuer eine reine Datenplatte genuegt das.
+# `overwrite: false` ist die Bremse: cloud-init formatiert nur, wenn dort noch
+# kein Dateisystem liegt. Ohne das waere ein zweiter Lauf ein Datenverlust.
+fs_setup:
+%{~ for disk in managed_disks }
+  - device: ${jsonencode(disk.device)}
+    filesystem: ${jsonencode(disk.filesystem)}
+    label: ${jsonencode(disk.label)}
+    partition: none
+    overwrite: false
+%{~ endfor }
+
+# nofail: haengt die Platte nicht ein, wenn sie fehlt, statt den Boot in die
+# Notfall-Shell laufen zu lassen.
+mounts:
+%{~ for disk in managed_disks }
+  - [${jsonencode(disk.device)}, ${jsonencode(disk.mount)}, ${jsonencode(disk.filesystem)}, "defaults,nofail", "0", "2"]
+%{~ endfor }
+%{~ endif }
+
 runcmd:
   - systemctl enable --now qemu-guest-agent || true
 

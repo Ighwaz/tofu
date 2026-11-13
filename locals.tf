@@ -64,12 +64,17 @@ locals {
       extra_disks     = vm.extra_disks
       bios            = coalesce(vm.bios, var.vm_defaults.bios)
       machine         = try(coalesce(vm.machine, var.vm_defaults.machine), null)
-      on_boot         = coalesce(vm.on_boot, var.vm_defaults.on_boot)
-      started         = coalesce(vm.started, var.vm_defaults.started)
-      pool_id         = try(coalesce(vm.pool_id, var.vm_defaults.pool_id), null)
-      tags            = vm.tags == null ? var.vm_defaults.tags : vm.tags
-      agent_enabled   = coalesce(vm.agent_enabled, var.vm_defaults.agent_enabled)
-      agent_timeout   = coalesce(vm.agent_timeout, var.vm_defaults.agent_timeout)
+
+      disk_file_format = try(coalesce(vm.disk_file_format, var.vm_defaults.disk_file_format), null)
+      hotplug          = try(coalesce(vm.hotplug, var.vm_defaults.hotplug), null)
+      cpu_numa         = coalesce(vm.cpu_numa, var.vm_defaults.cpu_numa)
+      cpu_flags        = vm.cpu_flags == null ? var.vm_defaults.cpu_flags : vm.cpu_flags
+      on_boot          = coalesce(vm.on_boot, var.vm_defaults.on_boot)
+      started          = coalesce(vm.started, var.vm_defaults.started)
+      pool_id          = try(coalesce(vm.pool_id, var.vm_defaults.pool_id), null)
+      tags             = vm.tags == null ? var.vm_defaults.tags : vm.tags
+      agent_enabled    = coalesce(vm.agent_enabled, var.vm_defaults.agent_enabled)
+      agent_timeout    = coalesce(vm.agent_timeout, var.vm_defaults.agent_timeout)
 
       network_devices = vm.network_devices == null ? var.vm_defaults.network_devices : vm.network_devices
       ip_configs      = vm.ip_configs == null ? var.vm_defaults.ip_configs : vm.ip_configs
