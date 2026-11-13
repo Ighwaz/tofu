@@ -156,8 +156,10 @@ Ein Image wird pro Node einmal geladen, auf dem es gebraucht wird.
 | `vm_id` | feste VMID | automatisch |
 | `cpu_cores`, `cpu_sockets`, `cpu_type` | CPU | 2 / 1 / `x86-64-v2-AES` |
 | `memory`, `memory_floating` | RAM in MiB, Ballooning-Minimum | 2048 / 0 |
-| `disk_size`, `datastore_id`, `disk_interface` | Boot-Disk | 20 GiB / `bigpool` / `virtio0` |
-| `extra_disks` | weitere Datendisks | `[]` |
+| `disk_size`, `datastore_id`, `disk_interface` | Boot-Disk | 20 GiB / `bigpool` / `scsi0` |
+| `disk_discard`, `disk_iothread`, `disk_ssd` | Disk-Flags | `on`, `true`, `true` |
+| `disk_file_format` | `raw` (ZFS/LVM/Ceph) oder `qcow2` (dir/NFS/CIFS) | `raw` |
+| `extra_disks` | weitere Datendisks, mit `filesystem` + `mount` automatisch formatiert und eingehängt | `[]` |
 | `network_devices` | Bridge, VLAN, MAC, MTU | `vmbr0` |
 | `ip_configs` | `dhcp` oder CIDR + Gateway | `dhcp` |
 | `dns_servers`, `dns_domain` | cloud-init DNS | Node-Vorgabe |
@@ -165,8 +167,50 @@ Ein Image wird pro Node einmal geladen, auf dem es gebraucht wird.
 | `packages`, `package_upgrade` | cloud-init Paketinstallation | `["qemu-guest-agent"]`, `false` |
 | `user_data` | komplette eigene cloud-config | generiert |
 | `tags`, `pool_id`, `on_boot`, `started` | PVE-Metadaten | `["opentofu"]`, –, `true`, `true` |
-| `bios`, `machine` | `seabios`/`ovmf`, z. B. `q35` | `seabios`, PVE-Default |
+| `bios`, `machine` | `seabios`/`ovmf`, z. B. `q35` | `ovmf`, `q35` |
+| `cpu_numa`, `cpu_flags` | NUMA, CPU-Flags (z. B. `["+pcid", "+md-clear", "+ssbd"]`) | `true`, `[]` |
+| `hotplug` | im Betrieb aenderbare Geraeteklassen | `"cpu,memory,network,disk,usb"` |
 | `agent_enabled`, `agent_timeout` | QEMU-Guest-Agent | `true`, `15m` |
+
+Diese gelten für alle VMs gemeinsam und stehen nur in `vm_defaults`, nicht je VM:
+
+| Feld | Bedeutung | Default |
+| --- | --- | --- |
+| `scsi_hardware` | SCSI-Controller | `virtio-scsi-single` |
+| `disk_aio`, `disk_cache` | AIO-Modus und Cache aller Disks | `io_uring`, `none` |
+| `efi_disk_type`, `efi_disk_pre_enrolled_keys` | EFI-Disk bei `bios = "ovmf"` | `4m`, `false` |
+| `cpu_units` | CPU-Gewichtung | 100 |
+| `tablet_device` | Tablet-Zeiger (nur für VNC-Mausbedienung nötig) | `false` |
+| `migrate` | Disk-Anlage für Live-Migration vorbereiten | `false` |
+
+## Zusatzplatten automatisch einrichten
+
+Eine Zusatzplatte, die `filesystem` und `mount` nennt, wird beim ersten Boot von
+cloud-init formatiert, in die `fstab` eingetragen und eingehängt — ohne manuelles
+`mkfs` per SSH:
+
+```hcl
+vms = {
+  "data-node" = {
+    extra_disks = [{
+      interface  = "scsi1"
+      size       = 100
+      filesystem = "ext4"
+      mount      = "/var/lib/data"
+    }]
+  }
+}
+```
+
+Die Zuordnung läuft über die Disk-Serial, nicht über `/dev/sdb`: jede Disk bekommt
+`serial = "drive-<interface>"`, der Gast findet sie darunter in `/dev/disk/by-id/`.
+Das bleibt auch stabil, wenn später eine weitere Platte dazukommt. cloud-init
+formatiert nur, wenn die Platte leer ist (`overwrite: false`), und mountet mit
+`nofail` — eine fehlende Platte verhindert also keinen Boot.
+
+`filesystem` und `mount` gehören zusammen: nur eines von beiden lehnt das Modul
+mit einer Fehlermeldung ab. Ohne beide wird die Platte angelegt und sonst nichts
+getan — dann machst du es selbst im Gast.
 
 ## LXC-Container definieren
 
@@ -257,7 +301,13 @@ Katalog steht, bricht der Plan mit einer entsprechenden Meldung ab.
 - **`disk_size` muss mindestens so groß sein wie das Image** (Debian ~2 GiB,
   Ubuntu ~3,5 GiB). Vergrößern geht später, Verkleinern nicht.
 - **SSD-Emulation** (`disk_ssd = true`) funktioniert nicht mit `virtio*`-Interfaces;
-  dafür `disk_interface = "scsi0"` verwenden.
+  dafür `disk_interface = "scsi0"` verwenden. Das gilt auch für `extra_disks` — eine
+  Zusatzplatte auf `virtio1` braucht `ssd = false`.
+- **`disk_file_format` muss zum Storage passen.** `raw` für ZFS, LVM-thin und Ceph,
+  `qcow2` für Verzeichnis-, NFS- und CIFS-Storage. Der Default `raw` passt zu
+  `bigpool`. Falsch gesetzt scheitert erst der `apply`, nicht das `validate`.
+- **`bios = "ovmf"`** legt automatisch eine EFI-Disk an. Ein Wechsel zwischen
+  `seabios` und `ovmf` ersetzt die VM, weil die EFI-Disk dazu- oder wegkommt.
 - **Guest-Agent**: `agent_enabled = true` lässt `apply` warten, bis der Agent
   antwortet. Das setzt voraus, dass `qemu-guest-agent` installiert wird — also
   `cloud_init_snippet = true` und das Paket in `packages`. Sonst läuft der Apply in
@@ -281,7 +331,10 @@ Speziell auf `procmox`:
   Bind-Mounts nur per `vzdump` gesichert werden können — von OpenTofu erzeugte
   Gäste haben solche Mounts nicht, solange du keine `mount_points` setzt.
 - **SSD-Emulation geht auf ZFS nicht über virtio.** `disk_ssd = true` braucht
-  `disk_interface = "scsi0"`.
+  `disk_interface = "scsi0"` — deshalb ist `scsi0` hier der Default.
+- **`bigpool` braucht `raw`.** ZFS kann kein qcow2; `disk_file_format = "raw"` ist
+  deshalb voreingestellt. Nur wenn du eine VM auf `local` (Verzeichnis-Storage)
+  legst, brauchst du dort `qcow2`.
 - **`pbs-backup` ist tot** (`No route to host` laut Ansible-Repo). Als Backup-Ziel
   taugt nur `nas-backup`; das betrifft OpenTofu nicht direkt, wohl aber jeden
   Plan, die Gäste anschließend zu sichern.

@@ -50,6 +50,25 @@ vm_defaults = {
   memory    = 2048
   disk_size = 20
 
+  # bigpool ist ZFS - das kann kein qcow2, also raw. Nur bei einer VM auf
+  # Verzeichnis-Storage (local, NFS, CIFS) muss hier "qcow2" stehen.
+  disk_file_format = "raw"
+
+  # UEFI mit q35 und virtio-scsi-single, wie in der Arbeitsumgebung. Die
+  # EFI-Disk legt das Modul bei bios = "ovmf" selbst an. Die Debian- und
+  # Ubuntu-Cloud-Images booten beides; wenn eine VM nicht hochkommt, ist
+  # bios = "seabios" + machine = null der Weg zurueck (ersetzt die VM).
+  bios          = "ovmf"
+  machine       = "q35"
+  scsi_hardware = "virtio-scsi-single"
+
+  # SSD-Emulation braucht ein scsi-Interface, nicht virtio.
+  disk_interface = "scsi0"
+  disk_ssd       = true
+
+  # cpu,memory,network,disk,usb erlaubt das Aendern im laufenden Betrieb.
+  hotplug = "cpu,memory,network,disk,usb"
+
   username = "tofu"
   ssh_public_keys = [
     # Oeffentlicher Schluessel deines Arbeitsplatzrechners.
@@ -110,6 +129,21 @@ vms = {
     disk_size = 20
     tags      = ["opentofu", "debian"]
   }
+
+  # Zusatzplatte, die cloud-init beim ersten Boot selbst einrichtet:
+  # formatieren, in die fstab eintragen, mounten. Kein mkfs per SSH.
+  # "tofu-data" = {
+  #   image     = "debian-13"
+  #   vm_id     = 503
+  #   disk_size = 20
+  #
+  #   extra_disks = [{
+  #     interface  = "scsi1"
+  #     size       = 100
+  #     filesystem = "ext4"
+  #     mount      = "/var/lib/data"
+  #   }]
+  # }
 
   # Ubuntu 24.04 mit fester IP ausserhalb des DHCP-Bereichs
   # "tofu-ubuntu" = {

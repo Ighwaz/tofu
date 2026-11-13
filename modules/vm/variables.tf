@@ -59,6 +59,28 @@ variable "cpu_type" {
   default     = "x86-64-v2-AES"
 }
 
+variable "cpu_units" {
+  description = "CPU-Gewicht gegenueber anderen Gaesten (PVE-Default 1024, 100 drosselt stark)."
+  type        = number
+  default     = null
+}
+
+variable "cpu_numa" {
+  description = "NUMA aktivieren. Noetig, damit Hotplug von Speicher funktioniert."
+  type        = bool
+  default     = false
+}
+
+variable "cpu_flags" {
+  description = <<-EOT
+    Zusaetzliche CPU-Flags, z. B. ["+pcid", "+pdpe1gb", "+md-clear", "+ssbd"].
+    Was der Host kann, zeigt `lscpu` auf dem Node; ein Flag, das die CPU nicht
+    hat, laesst die VM nicht starten.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "memory" {
   description = "Arbeitsspeicher in MiB."
   type        = number
@@ -107,16 +129,55 @@ variable "disk_ssd" {
   default     = false
 }
 
+variable "disk_file_format" {
+  description = <<-EOT
+    Format der Disk-Images. Haengt am Typ des Storage:
+
+      dir / NFS / CIFS  -> "qcow2" (koennen Snapshots selbst)
+      ZFS / LVM / Ceph  -> "raw"   (Snapshots macht die Storage-Ebene)
+
+    Ein qcow2 auf einem Blockstorage lehnt PVE beim Anlegen ab. Auf `procmox`
+    ist `bigpool` ZFS, deshalb steht der Default im Wurzelmodul auf "raw".
+    null laesst den Provider entscheiden.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "disk_aio" {
+  description = "Async-IO-Verfahren: 'io_uring' (modern, Default), 'native' oder 'threads'."
+  type        = string
+  default     = "io_uring"
+}
+
+variable "disk_cache" {
+  description = "Cache-Verfahren. 'none' ueberlaesst das Zwischenspeichern dem Gast und ist bei ZFS richtig."
+  type        = string
+  default     = "none"
+}
+
 variable "extra_disks" {
-  description = "Weitere Datendisks."
+  description = <<-EOT
+    Weitere Datendisks. Mit `filesystem` und `mount` richtet cloud-init die
+    Platte beim ersten Start gleich ein: Dateisystem anlegen, einhaengen und
+    in die fstab schreiben. Ohne die beiden Felder haengt die Platte nur
+    unformatiert in der VM.
+
+    Angesprochen wird sie ueber /dev/disk/by-id/...drive-<interface>, weil
+    jede Disk eine feste Serial bekommt - /dev/sdb waere je nach
+    Erkennungsreihenfolge eine andere Platte.
+  EOT
   type = list(object({
     interface    = string
     size         = number
     datastore_id = optional(string)
+    file_format  = optional(string)
     discard      = optional(string, "on")
     iothread     = optional(bool, true)
     ssd          = optional(bool, false)
     backup       = optional(bool, true)
+    filesystem   = optional(string)
+    mount        = optional(string)
   }))
   default = []
 }
@@ -129,6 +190,42 @@ variable "bios" {
 
 variable "machine" {
   description = "Machine-Type, z. B. 'q35'. null = PVE-Default (i440fx)."
+  type        = string
+  default     = null
+}
+
+variable "scsi_hardware" {
+  description = "SCSI-Controller. 'virtio-scsi-single' ist Voraussetzung dafuer, dass iothread je Disk wirkt."
+  type        = string
+  default     = "virtio-scsi-single"
+}
+
+variable "efi_disk_type" {
+  description = "Groesse der EFI-Disk ('2m' oder '4m'). Nur relevant bei bios = 'ovmf'."
+  type        = string
+  default     = "4m"
+}
+
+variable "efi_disk_pre_enrolled_keys" {
+  description = "Secure-Boot-Schluessel vorab eintragen. false laesst ungesignierte Kernel booten."
+  type        = bool
+  default     = false
+}
+
+variable "tablet_device" {
+  description = "Virtuelles Tablet-Zeigegeraet. Nur fuer die Konsole noetig, kostet sonst nur Interrupts."
+  type        = bool
+  default     = false
+}
+
+variable "migrate" {
+  description = "Aenderungen per Migration statt Neustart anwenden, wo PVE das kann (nur im Cluster sinnvoll)."
+  type        = bool
+  default     = false
+}
+
+variable "hotplug" {
+  description = "Welche Geraete im laufenden Betrieb angesteckt werden koennen, z. B. 'cpu,memory,network,disk,usb'."
   type        = string
   default     = null
 }
@@ -170,6 +267,7 @@ variable "network_devices" {
     mac_address = optional(string)
     mtu         = optional(number)
     firewall    = optional(bool, false)
+    queues      = optional(number)
   }))
   default = [{}]
 }
