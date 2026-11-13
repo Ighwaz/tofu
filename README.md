@@ -39,10 +39,19 @@ Provider: [`bpg/proxmox`](https://search.opentofu.org/provider/bpg/proxmox/lates
    ```bash
    pveum user add tofu@pve
    pveum aclmod / -user tofu@pve -role PVEAdmin
+   pveum role add TofuDownload -privs "Sys.Modify"
+   pveum aclmod / -user tofu@pve -role TofuDownload
    pveum user token add tofu@pve provider --privsep 0
    ```
 
    Die ausgegebene Token-Secret nur einmal sichtbar — direkt notieren.
+
+   `PVEAdmin` allein reicht **nicht**: Der API-Endpunkt `download-url`, über den
+   `proxmox_download_file` die Cloud-Images holt, verlangt zusaetzlich
+   `Sys.Modify`, und das ist in `PVEAdmin` nicht enthalten. Ohne die zweite
+   Rolle scheitert der Download mit `HTTP 403 - Permission check failed`. Eine
+   eigene Rolle mit genau diesem einen Recht ist sparsamer, als dem Token
+   `Administrator` zu geben.
 
 2. **Snippets aktivieren** auf dem Datastore, der die cloud-init-Dateien aufnimmt:
    `Datacenter → Storage → local → Edit → Content` und `Snippets` anhaken.
@@ -341,6 +350,11 @@ Speziell auf `procmox`:
 
 Speziell für LXC:
 
+- **Debian 13 im Container will `nesting`.** Beim Anlegen warnt PVE mit
+  `Systemd 257 detected. You may need to enable nesting.` Ob es stoert, zeigt
+  `pct exec <vmid> -- systemctl is-system-running`: bei `degraded` in der
+  tfvars `features = { nesting = true }` setzen. Achtung, das verlangt je nach
+  PVE-Version `root@pam` und wird einem API-Token verweigert.
 - **Container haben kein cloud-init.** SSH-Keys und Passwort gehen direkt an `root`,
   eine Paketinstallation beim ersten Start gibt es nicht — dafür sind sie in Sekunden
   statt Minuten da.
