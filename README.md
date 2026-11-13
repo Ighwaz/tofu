@@ -307,28 +307,61 @@ Forgejo liegen. Forgejo läuft im LAN unter `git.lab.home.arpa`
 (→ `192.168.178.168`, Docker-Container auf LXC 103) und ist von außen nicht
 erreichbar — diese Schritte laufen also auf einem Rechner im Heimnetz.
 
-### Einmalig einrichten
+Das Gegenstück liegt dort unter `homelab/tofu` — der Besitzer in Forgejo ist
+also **nicht** derselbe wie auf GitHub (`Ighwaz`). Wer das Repo woanders
+anlegt, ersetzt `homelab` in den Befehlen unten entsprechend; die
+vollständige URL steht nach dem Anlegen oben auf der Repo-Seite in Forgejo.
 
-1. In Forgejo ein leeres Repository `tofu` anlegen (ohne README, ohne
-   `.gitignore` — es wird ein bestehendes Repo hineingeschoben).
+### 1. Repository in Forgejo anlegen
 
-2. Remote hinzufügen und beide Branches hochschieben:
+Das geht nur von Hand, angemeldet in der Forgejo-Oberfläche: `+` oben rechts →
+*Neues Repository*.
 
-   ```bash
-   git clone https://github.com/Ighwaz/tofu && cd tofu
+- Name `tofu`, Besitzer bewusst wählen (eigener Benutzer oder Organisation).
+- **Alles zum Initialisieren weglassen** — kein README, keine `.gitignore`,
+  keine Lizenz. Sonst hat Forgejo einen eigenen ersten Commit, der Push von
+  `main` wird als `non-fast-forward` abgelehnt, und es bleibt nur
+  `git push forgejo main --force`.
+- Danach *Settings → Advanced* öffnen und **Actions aktivieren**. Bei einem
+  neuen Repository ist das oft aus; der Workflow in `.forgejo/workflows/` läuft
+  dann einfach nicht, ohne jede Fehlermeldung. Instanzweit muss zusätzlich
+  `[actions] ENABLED = true` in der `app.ini` stehen.
 
-   git remote add forgejo https://git.lab.home.arpa/Ighwaz/tofu.git
-   git push forgejo main
-   git push forgejo --tags
-   ```
+Solange das Repository nicht existiert, antwortet Forgejo auf einen Push mit
+`remote: Not found` — dieselbe Meldung wie bei fehlender Berechtigung, sie sagt
+also nicht, welches von beiden es war.
 
-   Bei der Passwortabfrage **nicht** das Anmeldepasswort verwenden, sondern ein
-   Access Token aus Forgejo (Settings → Applications → Generate New Token,
-   Scope `write:repository`). Über SSH geht es ohne Token:
+### 2. Remote einrichten und pushen
 
-   ```bash
-   git remote add forgejo git@git.lab.home.arpa:Ighwaz/tofu.git
-   ```
+```bash
+git clone https://github.com/Ighwaz/tofu
+cd tofu
+
+git remote add forgejo https://git.lab.home.arpa/homelab/tofu.git
+git push forgejo main
+git push forgejo --tags
+```
+
+Unter **Windows PowerShell** (5.1) gibt es kein `&&` — jeder Befehl in eine
+eigene Zeile, oder mit `;` trennen. In PowerShell 7 und in bash/zsh
+funktioniert `&&` wie gewohnt.
+
+Heißt der Remote `forgejo` schon, lehnt `git remote add` ihn ab
+(`error: remote forgejo already exists`). Dann die URL ersetzen statt neu
+anlegen:
+
+```bash
+git remote set-url forgejo https://git.lab.home.arpa/homelab/tofu.git
+git remote -v
+```
+
+Bei der Passwortabfrage **nicht** das Anmeldepasswort verwenden, sondern ein
+Access Token aus Forgejo (Settings → Applications → Generate New Token,
+Scope `write:repository`). Über SSH geht es ohne Token:
+
+```bash
+git remote add forgejo git@git.lab.home.arpa:homelab/tofu.git
+```
 
 ### Beide Remotes mit einem Befehl bedienen
 
@@ -337,12 +370,23 @@ eine zweite Push-URL:
 
 ```bash
 git remote set-url --add --push origin https://github.com/Ighwaz/tofu.git
-git remote set-url --add --push origin https://git.lab.home.arpa/Ighwaz/tofu.git
+git remote set-url --add --push origin https://git.lab.home.arpa/homelab/tofu.git
 ```
 
 `git push origin main` schreibt danach in beide. Gefetcht wird weiter nur von
 GitHub. Das ist Konfiguration in `.git/config` und wird **nicht** mit dem
 Repository geteilt — auf jedem Klon einmal zu setzen.
+
+**Ohne diese zweite Push-URL geht `git push` nur an `origin`**, also an
+GitHub. Ein zusätzlicher Remote namens `forgejo` wird dabei nicht mitbedient;
+er braucht jedes Mal ein ausdrückliches `git push forgejo main`. Vergisst man
+das, laufen die beiden Seiten auseinander, ohne dass irgendetwas warnt — zu
+sehen ist es nur, wenn man die letzten Commits auf beiden vergleicht:
+
+```bash
+git log --oneline -1 origin/main
+git log --oneline -1 forgejo/main   # vorher: git fetch forgejo
+```
 
 Alternativ kann Forgejo selbst spiegeln: Repo → Settings → Mirror Settings →
 *Pull* von GitHub. Dann ist Forgejo immer aktuell, ohne dass du doppelt pushst
