@@ -1,0 +1,55 @@
+name: OpenTofu
+
+# Forgejo-Actions-Gegenstueck zu .github/workflows/tofu.yml.
+#
+# Zwei Dinge sind bei Forgejo anders als bei GitHub:
+#
+# 1. Es muss ein Runner registriert und dem Repository zugeordnet sein
+#    (Forgejo -> Repo -> Settings -> Actions -> Runners). Ohne Runner wird
+#    der Lauf angelegt, bleibt aber in "waiting" haengen.
+#
+# 2. `uses:`-Actions holt Forgejo von der in der Instanz eingestellten
+#    Quelle. Standard ist https://github.com, der Runner braucht dafuer also
+#    ausgehenden Internetzugang. Steht DEFAULT_ACTIONS_URL auf Codeberg, sind
+#    die beiden Actions unten dort nicht verfuegbar - dann die Variante ohne
+#    Actions weiter unten verwenden.
+#
+# `runs-on` muss zu einem Label passen, das der Runner bei der Registrierung
+# gemeldet hat. `docker` ist bei forgejo-runner ueblich; bei einem Runner mit
+# Host-Ausfuehrung ggf. `native` oder ein eigenes Label.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: https://github.com/opentofu/setup-opentofu@v1
+        with:
+          tofu_wrapper: false
+
+      - name: tofu fmt
+        run: tofu fmt -check -recursive -diff
+
+      - name: tofu init
+        run: tofu init -backend=false
+
+      - name: tofu validate
+        run: tofu validate
+
+      - name: tofu validate (modules/vm)
+        run: |
+          cd modules/vm
+          tofu init -backend=false
+          tofu validate
+
+      - name: tofu validate (modules/lxc)
+        run: |
+          cd modules/lxc
+          tofu init -backend=false
+          tofu validate

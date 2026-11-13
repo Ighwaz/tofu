@@ -1,8 +1,15 @@
 # OpenTofu für Proxmox VE
 
 Deployt Debian- und Ubuntu-**VMs** (Cloud-Images + cloud-init) und **LXC-Container**
-auf einer Proxmox-VE-Instanz. Beides wird deklarativ in `terraform.tfvars` beschrieben;
-die passenden Images bzw. Templates lädt OpenTofu automatisch auf den PVE-Storage.
+auf der Proxmox-Node **`procmox`** (PVE 9.2). Beides wird deklarativ in
+`terraform.tfvars` beschrieben; die passenden Images bzw. Templates lädt OpenTofu
+automatisch auf den PVE-Storage.
+
+Die Vorgaben in `variables.tf` sind auf diese Node zugeschnitten: API unter
+`https://192.168.178.10:8006/`, Node `procmox`, Gast-Disks auf `bigpool` (ZFS),
+Images und LXC-Templates auf `local`, DNS `192.168.178.50` (adguardCT),
+Such-Domain `lab.home.arpa`. Für eine andere Node reicht es, diese Werte in
+`terraform.tfvars` zu überschreiben.
 
 Provider: [`bpg/proxmox`](https://search.opentofu.org/provider/bpg/proxmox/latest)
 
@@ -10,6 +17,8 @@ Provider: [`bpg/proxmox`](https://search.opentofu.org/provider/bpg/proxmox/lates
 
 ```
 .
+├── .forgejo/workflows/      # CI für Forgejo Actions
+├── .github/workflows/       # CI für GitHub Actions (gleicher Inhalt)
 ├── versions.tf              # OpenTofu- und Provider-Versionen, Backend-Vorlage
 ├── providers.tf             # Proxmox-Provider (API + SSH)
 ├── variables.tf             # Eingabevariablen
@@ -38,8 +47,8 @@ Provider: [`bpg/proxmox`](https://search.opentofu.org/provider/bpg/proxmox/lates
 2. **Snippets aktivieren** auf dem Datastore, der die cloud-init-Dateien aufnimmt:
    `Datacenter → Storage → local → Edit → Content` und `Snippets` anhaken.
 
-3. **SSH-Zugriff auf die Nodes**: Der Provider lädt die cloud-init-user-data per SSH
-   (`scp`) hoch. Ein SSH-Key für `root@<node>` im SSH-Agent reicht.
+3. **SSH-Zugriff auf die Node**: Der Provider lädt die cloud-init-user-data per SSH
+   (`scp`) hoch. Ein SSH-Key für `root@192.168.178.10` im SSH-Agent reicht.
    Punkt 2 und 3 gelten nur für VMs — LXC-Container brauchen weder Snippets noch SSH.
    Wer keine Snippets nutzen will, setzt `cloud_init_snippet = false` — dann läuft
    alles über die API, es werden aber **keine Pakete installiert** (auch kein
@@ -49,7 +58,8 @@ Provider: [`bpg/proxmox`](https://search.opentofu.org/provider/bpg/proxmox/lates
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars
-$EDITOR terraform.tfvars                     # Node-Name, Storage, SSH-Key, VMs eintragen
+$EDITOR terraform.tfvars                     # SSH-Key eintragen, VMs/Container festlegen
+                                             # Node, Storages und DNS sind vorbelegt
 
 export TF_VAR_proxmox_api_token='tofu@pve!provider=xxxxxxxx-...'
 
@@ -74,11 +84,11 @@ Jeder Eintrag in `vms` ist eine VM; der Key ist Name und Hostname. Alles, was do
 nicht gesetzt ist, kommt aus `vm_defaults`:
 
 ```hcl
-node_name = "pve" # Standard-Node für VMs und Container
+node_name = "procmox" # Standard-Node für VMs und Container
 
 vm_defaults = {
   image           = "debian-12"
-  datastore_id    = "local-lvm"
+  datastore_id    = "bigpool"
   cpu_cores       = 2
   memory          = 2048
   disk_size       = 20
@@ -99,8 +109,8 @@ vms = {
     disk_size = 40
 
     ip_configs = [{
-      ipv4_address = "192.168.1.50/24"
-      ipv4_gateway = "192.168.1.1"
+      ipv4_address = "192.168.178.60/24"
+      ipv4_gateway = "192.168.178.1"
     }]
 
     packages = ["qemu-guest-agent", "curl", "vim"]
@@ -146,7 +156,7 @@ Ein Image wird pro Node einmal geladen, auf dem es gebraucht wird.
 | `vm_id` | feste VMID | automatisch |
 | `cpu_cores`, `cpu_sockets`, `cpu_type` | CPU | 2 / 1 / `x86-64-v2-AES` |
 | `memory`, `memory_floating` | RAM in MiB, Ballooning-Minimum | 2048 / 0 |
-| `disk_size`, `datastore_id`, `disk_interface` | Boot-Disk | 20 GiB / `local-lvm` / `virtio0` |
+| `disk_size`, `datastore_id`, `disk_interface` | Boot-Disk | 20 GiB / `bigpool` / `virtio0` |
 | `extra_disks` | weitere Datendisks | `[]` |
 | `network_devices` | Bridge, VLAN, MAC, MTU | `vmbr0` |
 | `ip_configs` | `dhcp` oder CIDR + Gateway | `dhcp` |
@@ -186,7 +196,7 @@ containers = {
     memory     = 1024
     disk_size  = 16
     features   = { nesting = true } # z. B. für Docker im Container
-    ip_configs = [{ ipv4_address = "192.168.1.60/24", ipv4_gateway = "192.168.1.1" }]
+    ip_configs = [{ ipv4_address = "192.168.178.61/24", ipv4_gateway = "192.168.178.1" }]
   }
 }
 ```
@@ -233,7 +243,7 @@ Katalog steht, bricht der Plan mit einer entsprechenden Meldung ab.
 | `vm_id` | feste VMID | automatisch |
 | `cpu_cores` | CPU-Kerne | 2 |
 | `memory`, `swap` | RAM/Swap in MiB | 512 / 512 |
-| `disk_size`, `datastore_id` | Root-Filesystem | 8 GiB / `local-lvm` |
+| `disk_size`, `datastore_id` | Root-Filesystem | 8 GiB / `bigpool` |
 | `mount_points` | zusätzliche Mounts (`path`, `size`, `volume`) | `[]` |
 | `features` | `nesting`, `fuse`, `keyctl`, `mount` | alles aus |
 | `network_interfaces` | Bridge, VLAN, MAC, MTU, Rate-Limit | `vmbr0` als `veth0` |
@@ -260,6 +270,22 @@ Katalog steht, bricht der Plan mit einer entsprechenden Meldung ab.
   Zugangsdaten — nicht einchecken (ist per `.gitignore` ausgeschlossen). Für den
   Mehrbenutzerbetrieb den Backend-Block in `versions.tf` ausfüllen.
 
+Speziell auf `procmox`:
+
+- **VMIDs ab 500.** Belegt bzw. reserviert sind laut Ansible-Inventory 100–106,
+  110, 112, 114, 150, 203 und 209. Die Beispiele hier liegen deshalb ab 500.
+  `vm_id` ganz weglassen geht auch — dann vergibt PVE die nächste freie.
+- **`bigpool` ist ZFS.** Snapshots der erzeugten Gäste funktionieren damit, was
+  zu den Wartungs-Playbooks im Ansible-Repo passt. Anders als bei den
+  bestehenden Containern `docker` (103) und `Jellyfin` (105), die wegen ihrer
+  Bind-Mounts nur per `vzdump` gesichert werden können — von OpenTofu erzeugte
+  Gäste haben solche Mounts nicht, solange du keine `mount_points` setzt.
+- **SSD-Emulation geht auf ZFS nicht über virtio.** `disk_ssd = true` braucht
+  `disk_interface = "scsi0"`.
+- **`pbs-backup` ist tot** (`No route to host` laut Ansible-Repo). Als Backup-Ziel
+  taugt nur `nas-backup`; das betrifft OpenTofu nicht direkt, wohl aber jeden
+  Plan, die Gäste anschließend zu sichern.
+
 Speziell für LXC:
 
 - **Container haben kein cloud-init.** SSH-Keys und Passwort gehen direkt an `root`,
@@ -274,6 +300,67 @@ Speziell für LXC:
 - Änderungen an `template`/`template_file_id`, `unprivileged` oder `datastore_id`
   ersetzen den Container.
 
+## Auf Forgejo spiegeln
+
+Das Repository liegt auf GitHub (`origin`) und soll zusätzlich auf dem eigenen
+Forgejo liegen. Forgejo läuft im LAN unter `git.lab.home.arpa`
+(→ `192.168.178.168`, Docker-Container auf LXC 103) und ist von außen nicht
+erreichbar — diese Schritte laufen also auf einem Rechner im Heimnetz.
+
+### Einmalig einrichten
+
+1. In Forgejo ein leeres Repository `tofu` anlegen (ohne README, ohne
+   `.gitignore` — es wird ein bestehendes Repo hineingeschoben).
+
+2. Remote hinzufügen und beide Branches hochschieben:
+
+   ```bash
+   git clone https://github.com/Ighwaz/tofu && cd tofu
+
+   git remote add forgejo https://git.lab.home.arpa/Ighwaz/tofu.git
+   git push forgejo main
+   git push forgejo --tags
+   ```
+
+   Bei der Passwortabfrage **nicht** das Anmeldepasswort verwenden, sondern ein
+   Access Token aus Forgejo (Settings → Applications → Generate New Token,
+   Scope `write:repository`). Über SSH geht es ohne Token:
+
+   ```bash
+   git remote add forgejo git@git.lab.home.arpa:Ighwaz/tofu.git
+   ```
+
+### Beide Remotes mit einem Befehl bedienen
+
+Wenn `git push` künftig an GitHub **und** Forgejo gehen soll, bekommt `origin`
+eine zweite Push-URL:
+
+```bash
+git remote set-url --add --push origin https://github.com/Ighwaz/tofu.git
+git remote set-url --add --push origin https://git.lab.home.arpa/Ighwaz/tofu.git
+```
+
+`git push origin main` schreibt danach in beide. Gefetcht wird weiter nur von
+GitHub. Das ist Konfiguration in `.git/config` und wird **nicht** mit dem
+Repository geteilt — auf jedem Klon einmal zu setzen.
+
+Alternativ kann Forgejo selbst spiegeln: Repo → Settings → Mirror Settings →
+*Pull* von GitHub. Dann ist Forgejo immer aktuell, ohne dass du doppelt pushst
+— Änderungen direkt in Forgejo sind dann allerdings nicht möglich.
+
+### CI
+
+`.forgejo/workflows/tofu.yml` ist das Forgejo-Gegenstück zum
+GitHub-Actions-Workflow und prüft dasselbe (`tofu fmt`, `init`, `validate` für
+Root-Config und beide Module). Es braucht einen registrierten Runner
+(Repo → Settings → Actions → Runners); ohne Runner bleibt der Lauf in
+*waiting* stehen. `runs-on: docker` muss zu einem Label passen, das der Runner
+bei der Registrierung gemeldet hat.
+
+Die `uses:`-Actions holt Forgejo standardmäßig von github.com — der Runner
+braucht dafür ausgehenden Internetzugang. Beide Workflow-Dateien bleiben im
+Repo: GitHub ignoriert `.forgejo/`, Forgejo ignoriert `.github/`.
+
 ## Module direkt verwenden
 
 `modules/vm` und `modules/lxc` lassen sich auch einzeln einbinden:
@@ -283,7 +370,7 @@ module "buildhost" {
   source = "./modules/vm"
 
   name          = "buildhost"
-  node_name     = "pve"
+  node_name     = "procmox"
   image_file_id = "local:iso/debian-12-genericcloud-amd64.img"
 
   cpu_cores       = 8
@@ -298,7 +385,7 @@ module "gitea" {
   source = "./modules/lxc"
 
   name             = "gitea"
-  node_name        = "pve"
+  node_name        = "procmox"
   template_file_id = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
 
   cpu_cores       = 2

@@ -1,42 +1,50 @@
 ###############################################################################
 # Kopieren nach terraform.tfvars und anpassen.
-# Achtung: terraform.tfvars ist per .gitignore ausgeschlossen.
+#
+# Die Werte hier sind auf die Node `procmox` (PVE 9.2) zugeschnitten und
+# stammen aus dem Ansible-Repo (inventory/hosts.yml, group_vars/proxmox.yml).
+# Was in variables.tf schon als Default steht, ist hier nur zur Erinnerung
+# aufgefuehrt und kann weggelassen werden.
+#
+# Achtung: terraform.tfvars ist per .gitignore ausgeschlossen und landet
+# NICHT im Repository. Zugangsdaten gehoeren genau hierhin, nicht in die
+# *.example.
 ###############################################################################
 
-proxmox_endpoint = "https://pve.example.com:8006/"
+proxmox_endpoint = "https://192.168.178.10:8006/"
+node_name        = "procmox"
 
-# Empfohlen: API-Token statt Passwort.
-# Erzeugen z. B. mit:
+# procmox hat ein selbstsigniertes Zertifikat.
+proxmox_insecure = true
+
+# API-Token statt Passwort. Erzeugen auf dem Node:
 #   pveum user add tofu@pve
 #   pveum aclmod / -user tofu@pve -role PVEAdmin
 #   pveum user token add tofu@pve provider --privsep 0
-# proxmox_api_token wird besser als Umgebungsvariable gesetzt:
-#   export TF_VAR_proxmox_api_token='tofu@pve!provider=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+#
+# Besser nicht hier eintragen, sondern als Umgebungsvariable setzen:
+#   export TF_VAR_proxmox_api_token='tofu@pve!provider=xxxxxxxx-xxxx-...'
 # proxmox_api_token = "tofu@pve!provider=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
-# Selbstsigniertes PVE-Zertifikat:
-proxmox_insecure = true
-
-# SSH wird fuer den Upload der cloud-init Snippets gebraucht.
+# SSH wird nur fuer den Upload der cloud-init-Snippets gebraucht (VMs).
+# Fuer LXC-Container ist das nicht noetig.
 proxmox_ssh_username = "root"
 proxmox_ssh_agent    = true
 # proxmox_ssh_private_key_file = "~/.ssh/id_ed25519"
 
-# Datastore fuer die heruntergeladenen Cloud-Images (Content-Type "iso").
-image_datastore_id = "local"
-
-# Standard-Node fuer alle VMs und Container.
-node_name = "pve"
+# Cloud-Images (Content-Type "iso") und LXC-Templates (Content-Type "vztmpl").
+# Beide liegen auf `local`; dort ist auch "snippets" zu aktivieren.
+# Alternative fuer Images: das NFS-Storage `ISO`.
+image_datastore_id    = "local"
+template_datastore_id = "local"
 
 ###############################################################################
 # Vorgaben fuer alle VMs
 ###############################################################################
 
 vm_defaults = {
-  # node_name  = "pve2"      # nur noetig, wenn VMs auf einem anderen Node als
-  #                          # dem globalen node_name laufen sollen
-  image        = "debian-12" # Default-Image
-  datastore_id = "local-lvm" # Storage fuer die VM-Disks
+  image        = "debian-13"
+  datastore_id = "bigpool" # ZFS, traegt laut Ansible-Inventory fast alle Gaeste
 
   cpu_cores = 2
   memory    = 2048
@@ -44,100 +52,29 @@ vm_defaults = {
 
   username = "tofu"
   ssh_public_keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@workstation",
+    # Oeffentlicher Schluessel deines Arbeitsplatzrechners.
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... tofa@laptop",
   ]
 
   # Snippets muessen auf dem Datastore aktiviert sein:
-  #   Datacenter -> Storage -> local -> Content -> "Snippets"
+  #   Datacenter -> Storage -> local -> Edit -> Content -> "Snippets"
   cloud_init_snippet   = true
   snippet_datastore_id = "local"
 
   network_devices = [{ bridge = "vmbr0" }]
-  ip_configs      = [{ ipv4_address = "dhcp" }]
-  # dns_servers = ["192.168.1.1"]
-  # dns_domain  = "lan"
+
+  # Das Netz arbeitet mit DHCP-Reservierungen (siehe Ansible-Inventory).
+  ip_configs  = [{ ipv4_address = "dhcp" }]
+  dns_servers = ["192.168.178.50"] # adguardCT (LXC 102)
+  dns_domain  = "lab.home.arpa"
 }
 
 ###############################################################################
-# Die einzelnen VMs
+# Vorgaben fuer alle LXC-Container
 ###############################################################################
 
-vms = {
-  # Debian 12 mit DHCP
-  "debian-test" = {
-    image     = "debian-12"
-    cpu_cores = 2
-    memory    = 2048
-    disk_size = 20
-    tags      = ["opentofu", "debian"]
-  }
-
-  # Ubuntu 24.04 mit fester IP und eigener VMID
-  "ubuntu-web" = {
-    image     = "ubuntu-24.04"
-    vm_id     = 1201
-    cpu_cores = 4
-    memory    = 4096
-    disk_size = 40
-    tags      = ["opentofu", "ubuntu", "web"]
-
-    ip_configs = [{
-      ipv4_address = "192.168.1.50/24"
-      ipv4_gateway = "192.168.1.1"
-    }]
-
-    dns_servers = ["192.168.1.1"]
-    dns_domain  = "lan"
-
-    packages        = ["qemu-guest-agent", "curl", "vim"]
-    package_upgrade = true
-  }
-
-  # Ubuntu 22.04 auf einem anderen Node, mit zusaetzlicher Datendisk und VLAN
-  # "ubuntu-db" = {
-  #   node_name = "pve2"
-  #   image     = "ubuntu-22.04"
-  #   cpu_cores = 4
-  #   memory    = 8192
-  #   disk_size = 30
-  #
-  #   extra_disks = [{
-  #     interface    = "scsi1"
-  #     size         = 100
-  #     datastore_id = "local-lvm"
-  #   }]
-  #
-  #   network_devices = [{
-  #     bridge  = "vmbr0"
-  #     vlan_id = 20
-  #   }]
-  # }
-}
-
-###############################################################################
-# Eigene Images ergaenzen (optional)
-###############################################################################
-
-# image_catalog = {
-#   "ubuntu-25.04" = {
-#     url       = "https://cloud-images.ubuntu.com/plucky/current/plucky-server-cloudimg-amd64.img"
-#     file_name = "ubuntu-25.04-server-cloudimg-amd64.img"
-#   }
-#   "debian-12-pinned" = {
-#     url                = "https://cloud.debian.org/images/cloud/bookworm/20240701-1794/debian-12-genericcloud-amd64-20240701-1794.qcow2"
-#     file_name          = "debian-12-genericcloud-amd64-20240701-1794.img"
-#     checksum           = "<sha512-summe>"
-#     checksum_algorithm = "sha512"
-#   }
-# }
-
-###############################################################################
-# LXC-Container
-###############################################################################
-
-# Vorgaben fuer alle Container
 lxc_defaults = {
-  datastore_id = "local-lvm"
+  datastore_id = "bigpool"
   cpu_cores    = 2
   memory       = 512
   swap         = 512
@@ -145,60 +82,102 @@ lxc_defaults = {
   unprivileged = true
 
   ssh_public_keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@workstation",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... tofa@laptop",
   ]
 
   network_interfaces = [{ bridge = "vmbr0" }]
   ip_configs         = [{ ipv4_address = "dhcp" }]
+  dns_servers        = ["192.168.178.50"]
+  dns_domain         = "lab.home.arpa"
 }
 
-# Templates, die OpenTofu selbst herunterladen soll. Die Dateinamen sind
-# versioniert - die aktuell verfuegbaren zeigt auf dem PVE-Host:
-#   pveam update && pveam available --section system
+###############################################################################
+# Die einzelnen VMs
 #
-# template_catalog = {
-#   "debian-12" = {
-#     url = "http://download.proxmox.com/images/system/debian-12-standard_12.7-1_amd64.tar.zst"
-#   }
-#   "ubuntu-24.04" = {
-#     url = "http://download.proxmox.com/images/system/ubuntu-24.04-standard_24.04-2_amd64.tar.zst"
-#   }
-# }
+# VMID-Vergabe: auf procmox sind 100-106, 110, 112, 114, 150, 203 und 209
+# belegt oder reserviert (siehe Ansible-Inventory). Damit sich OpenTofu und
+# die bestehenden Gaeste nicht in die Quere kommen, liegt alles, was von hier
+# verwaltet wird, ab 500. vm_id weglassen geht auch - dann vergibt PVE selbst.
+###############################################################################
+
+vms = {
+  # Debian 13 mit DHCP
+  "tofu-debian" = {
+    image     = "debian-13"
+    vm_id     = 501
+    cpu_cores = 2
+    memory    = 2048
+    disk_size = 20
+    tags      = ["opentofu", "debian"]
+  }
+
+  # Ubuntu 24.04 mit fester IP ausserhalb des DHCP-Bereichs
+  # "tofu-ubuntu" = {
+  #   image     = "ubuntu-24.04"
+  #   vm_id     = 502
+  #   cpu_cores = 4
+  #   memory    = 4096
+  #   disk_size = 40
+  #
+  #   ip_configs = [{
+  #     ipv4_address = "192.168.178.60/24"
+  #     ipv4_gateway = "192.168.178.1"
+  #   }]
+  #
+  #   packages        = ["qemu-guest-agent", "curl", "vim"]
+  #   package_upgrade = true
+  # }
+}
+
+###############################################################################
+# Die einzelnen LXC-Container
+#
+# LXC-Templates haben keine latest-URL. Die aktuell verfuegbaren Dateinamen
+# zeigt auf procmox:
+#   pveam update && pveam available --section system
+# Herunterladen:
+#   pveam download local debian-13-standard_13.0-1_amd64.tar.zst
+###############################################################################
 
 containers = {
-  # Variante A: Template liegt schon auf dem Node (pveam download local <datei>)
-  "debian-ct" = {
-    template_file_id = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+  # Variante A: Template liegt schon auf dem Node
+  "tofu-ct" = {
+    template_file_id = "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
     os_type          = "debian"
+    vm_id            = 510
     cpu_cores        = 1
     memory           = 512
     disk_size        = 8
     tags             = ["opentofu", "debian", "lxc"]
   }
 
-  # Variante B: Template aus var.template_catalog, OpenTofu laedt es herunter
-  # "ubuntu-ct" = {
+  # Variante B: OpenTofu laedt das Template selbst (template_catalog unten)
+  # "tofu-ct-ubuntu" = {
   #   template  = "ubuntu-24.04"
   #   os_type   = "ubuntu"
-  #   vm_id     = 1301
-  #   cpu_cores = 2
+  #   vm_id     = 511
   #   memory    = 1024
   #   disk_size = 16
   #
-  #   ip_configs = [{
-  #     ipv4_address = "192.168.1.60/24"
-  #     ipv4_gateway = "192.168.1.1"
-  #   }]
-  #
-  #   dns_servers = ["192.168.1.1"]
-  #
-  #   # nesting z. B. fuer Docker im Container
-  #   features = { nesting = true }
-  #
-  #   mount_points = [{
-  #     path   = "/mnt/data"
-  #     size   = "50G"
-  #     volume = "local-lvm"
-  #   }]
+  #   # nesting braucht root@pam - mit einem API-Token lehnt PVE das ab.
+  #   # features = { nesting = true }
   # }
 }
+
+# Eigene Template-URLs. Version vorher mit `pveam available` pruefen.
+# template_catalog = {
+#   "ubuntu-24.04" = {
+#     url = "http://download.proxmox.com/images/system/ubuntu-24.04-standard_24.04-2_amd64.tar.zst"
+#   }
+# }
+
+###############################################################################
+# Eigene Cloud-Images ergaenzen (optional)
+###############################################################################
+
+# image_catalog = {
+#   "debian-13-pinned" = {
+#     url       = "https://cloud.debian.org/images/cloud/trixie/20260101-1234/debian-13-genericcloud-amd64-20260101-1234.qcow2"
+#     file_name = "debian-13-genericcloud-amd64-20260101-1234.img"
+#   }
+# }

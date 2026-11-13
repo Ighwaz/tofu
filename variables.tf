@@ -3,8 +3,9 @@
 ###############################################################################
 
 variable "proxmox_endpoint" {
-  description = "URL der Proxmox VE API, z. B. https://pve.example.com:8006/"
+  description = "URL der Proxmox VE API."
   type        = string
+  default     = "https://192.168.178.10:8006/"
 }
 
 variable "proxmox_api_token" {
@@ -68,6 +69,7 @@ variable "proxmox_ssh_nodes" {
 variable "node_name" {
   description = "Standard-PVE-Node fuer alle VMs und Container. Pro VM/Container oder ueber vm_defaults/lxc_defaults uebersteuerbar."
   type        = string
+  default     = "procmox"
 }
 
 ###############################################################################
@@ -104,7 +106,7 @@ variable "vm_defaults" {
   type = object({
     node_name       = optional(string)
     image           = optional(string, "debian-12")
-    datastore_id    = optional(string, "local-lvm")
+    datastore_id    = optional(string, "bigpool")
     cpu_cores       = optional(number, 2)
     cpu_sockets     = optional(number, 1)
     cpu_type        = optional(string, "x86-64-v2-AES")
@@ -140,8 +142,8 @@ variable "vm_defaults" {
       ipv6_gateway = optional(string)
     })), [{}])
 
-    dns_servers = optional(list(string), [])
-    dns_domain  = optional(string, null)
+    dns_servers = optional(list(string), ["192.168.178.50"])
+    dns_domain  = optional(string, "lab.home.arpa")
 
     username        = optional(string, "tofu")
     ssh_public_keys = optional(list(string), [])
@@ -264,7 +266,7 @@ variable "lxc_defaults" {
     template_file_id = optional(string)
     os_type          = optional(string, "debian")
     unprivileged     = optional(bool, true)
-    datastore_id     = optional(string, "local-lvm")
+    datastore_id     = optional(string, "bigpool")
     disk_size        = optional(number, 8)
     cpu_cores        = optional(number, 2)
     memory           = optional(number, 512)
@@ -291,8 +293,8 @@ variable "lxc_defaults" {
       ipv6_gateway = optional(string)
     })), [{}])
 
-    dns_servers = optional(list(string), [])
-    dns_domain  = optional(string, null)
+    dns_servers = optional(list(string), ["192.168.178.50"])
+    dns_domain  = optional(string, "lab.home.arpa")
 
     ssh_public_keys = optional(list(string), [])
     password        = optional(string, null)
