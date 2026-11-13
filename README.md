@@ -307,10 +307,10 @@ Forgejo liegen. Forgejo läuft im LAN unter `git.lab.home.arpa`
 (→ `192.168.178.168`, Docker-Container auf LXC 103) und ist von außen nicht
 erreichbar — diese Schritte laufen also auf einem Rechner im Heimnetz.
 
-In den Befehlen unten steht `<owner>` für den Besitzer des Repositories in
-Forgejo — Benutzer oder Organisation, **nicht** zwangsläufig derselbe Name wie
-auf GitHub. Die vollständige URL steht nach dem Anlegen oben auf der
-Repo-Seite in Forgejo.
+Das Gegenstück liegt dort unter `homelab/tofu` — der Besitzer in Forgejo ist
+also **nicht** derselbe wie auf GitHub (`Ighwaz`). Wer das Repo woanders
+anlegt, ersetzt `homelab` in den Befehlen unten entsprechend; die
+vollständige URL steht nach dem Anlegen oben auf der Repo-Seite in Forgejo.
 
 ### 1. Repository in Forgejo anlegen
 
@@ -337,7 +337,7 @@ also nicht, welches von beiden es war.
 git clone https://github.com/Ighwaz/tofu
 cd tofu
 
-git remote add forgejo https://git.lab.home.arpa/<owner>/tofu.git
+git remote add forgejo https://git.lab.home.arpa/homelab/tofu.git
 git push forgejo main
 git push forgejo --tags
 ```
@@ -351,7 +351,7 @@ Heißt der Remote `forgejo` schon, lehnt `git remote add` ihn ab
 anlegen:
 
 ```bash
-git remote set-url forgejo https://git.lab.home.arpa/<owner>/tofu.git
+git remote set-url forgejo https://git.lab.home.arpa/homelab/tofu.git
 git remote -v
 ```
 
@@ -360,7 +360,7 @@ Access Token aus Forgejo (Settings → Applications → Generate New Token,
 Scope `write:repository`). Über SSH geht es ohne Token:
 
 ```bash
-git remote add forgejo git@git.lab.home.arpa:<owner>/tofu.git
+git remote add forgejo git@git.lab.home.arpa:homelab/tofu.git
 ```
 
 ### Beide Remotes mit einem Befehl bedienen
@@ -370,12 +370,23 @@ eine zweite Push-URL:
 
 ```bash
 git remote set-url --add --push origin https://github.com/Ighwaz/tofu.git
-git remote set-url --add --push origin https://git.lab.home.arpa/<owner>/tofu.git
+git remote set-url --add --push origin https://git.lab.home.arpa/homelab/tofu.git
 ```
 
 `git push origin main` schreibt danach in beide. Gefetcht wird weiter nur von
 GitHub. Das ist Konfiguration in `.git/config` und wird **nicht** mit dem
 Repository geteilt — auf jedem Klon einmal zu setzen.
+
+**Ohne diese zweite Push-URL geht `git push` nur an `origin`**, also an
+GitHub. Ein zusätzlicher Remote namens `forgejo` wird dabei nicht mitbedient;
+er braucht jedes Mal ein ausdrückliches `git push forgejo main`. Vergisst man
+das, laufen die beiden Seiten auseinander, ohne dass irgendetwas warnt — zu
+sehen ist es nur, wenn man die letzten Commits auf beiden vergleicht:
+
+```bash
+git log --oneline -1 origin/main
+git log --oneline -1 forgejo/main   # vorher: git fetch forgejo
+```
 
 Alternativ kann Forgejo selbst spiegeln: Repo → Settings → Mirror Settings →
 *Pull* von GitHub. Dann ist Forgejo immer aktuell, ohne dass du doppelt pushst
