@@ -20,7 +20,12 @@ proxmox_insecure = true
 # API-Token statt Passwort. Erzeugen auf dem Node:
 #   pveum user add tofu@pve
 #   pveum aclmod / -user tofu@pve -role PVEAdmin
+#   pveum role add TofuDownload -privs "Sys.Modify"
+#   pveum aclmod / -user tofu@pve -role TofuDownload
 #   pveum user token add tofu@pve provider --privsep 0
+#
+# Die zweite Rolle ist noetig: PVEAdmin enthaelt kein Sys.Modify, und ohne das
+# lehnt der download-url-Endpunkt den Image-Download mit HTTP 403 ab.
 #
 # Besser nicht hier eintragen, sondern als Umgebungsvariable setzen:
 #   export TF_VAR_proxmox_api_token='tofu@pve!provider=xxxxxxxx-xxxx-...'
@@ -176,13 +181,13 @@ vms = {
 # zeigt auf procmox:
 #   pveam update && pveam available --section system
 # Herunterladen:
-#   pveam download local debian-13-standard_13.0-1_amd64.tar.zst
+#   pveam download local debian-13-standard_13.6-1_amd64.tar.zst
 ###############################################################################
 
 containers = {
   # Variante A: Template liegt schon auf dem Node
   "tofu-ct" = {
-    template_file_id = "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
+    template_file_id = "local:vztmpl/debian-13-standard_13.6-1_amd64.tar.zst"
     os_type          = "debian"
     vm_id            = 510
     cpu_cores        = 1
