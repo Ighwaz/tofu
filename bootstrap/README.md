@@ -56,6 +56,10 @@ Das macht dieses Verzeichnis **nicht**. OpenTofu stellt den Container hin,
 eingerichtet wird mit Ansible — dieselbe Trennung wie beim Rest deines
 Homelabs. Für den ersten Lauf geht es auch von Hand.
 
+**Für die Ansible-Rolle gibt es eine ausführliche Vorgabe:
+[minio-setup.md](minio-setup.md)** — mit Inventory-Eintrag, benötigten
+Vault-Variablen, Hinweisen zur Idempotenz und Abnahmekriterien.
+
 Der Ablauf in Stichworten (gegen die
 [offizielle MinIO-Doku](https://min.io/docs/minio/linux/operations/install-deploy-manage/deploy-minio-single-node-single-drive.html)
 gegenprüfen — MinIOs Paketierung hat sich in den letzten Releases mehrfach
