@@ -46,6 +46,19 @@ variable "proxmox_ssh_agent" {
   default     = true
 }
 
+variable "proxmox_ssh_private_key" {
+  description = <<-EOT
+    Privater SSH-Schluessel als Text, einschliesslich der BEGIN- und END-Zeilen.
+    Gedacht fuer CI-Systeme wie Semaphore, die Secrets als Umgebungsvariable
+    durchreichen und keinen festen Dateipfad bieten: dort
+    TF_VAR_proxmox_ssh_private_key setzen und den Dateipfad weglassen.
+    Hat Vorrang vor var.proxmox_ssh_private_key_file.
+  EOT
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
 variable "proxmox_ssh_private_key_file" {
   description = "Pfad zu einem privaten SSH-Key, falls kein SSH-Agent genutzt wird."
   type        = string
