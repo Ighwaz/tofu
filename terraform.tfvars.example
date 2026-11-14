@@ -36,6 +36,10 @@ proxmox_insecure = true
 proxmox_ssh_username = "root"
 proxmox_ssh_agent    = true
 
+# Aus einem CI-System (Semaphore o. ae.) stattdessen den Schluessel als Text
+# ueber TF_VAR_proxmox_ssh_private_key reichen und den Dateipfad weglassen -
+# dort gibt es keinen stabilen Pfad. Der Text hat Vorrang vor der Datei.
+#
 # Unter Windows ist der SSH-Agent haeufig gar nicht aktiv. Dann stattdessen
 # den Schluessel direkt angeben - Pfad mit Schraegstrichen, auch unter Windows,
 # und ohne Passphrase, weil der Provider nicht danach fragen kann:

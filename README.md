@@ -63,6 +63,26 @@ Provider: [`bpg/proxmox`](https://search.opentofu.org/provider/bpg/proxmox/lates
    alles über die API, es werden aber **keine Pakete installiert** (auch kein
    `qemu-guest-agent`, dann zusätzlich `agent_enabled = false` setzen).
 
+### Aus einem CI-System heraus (Semaphore, Actions, ...)
+
+Auf einem Build-Runner gibt es keinen festen Pfad fuer den SSH-Schluessel — das
+Verzeichnis wechselt pro Lauf. Deshalb nimmt das Projekt den Schluessel
+wahlweise als *Text* entgegen. In Semaphore legst du ihn als Secret an:
+
+```
+TF_VAR_proxmox_api_token      = tofu@pve!provider=...
+TF_VAR_proxmox_ssh_private_key = -----BEGIN OPENSSH PRIVATE KEY-----
+                                 ...
+                                 -----END OPENSSH PRIVATE KEY-----
+```
+
+und laesst `proxmox_ssh_private_key_file` weg. Ist beides gesetzt, gewinnt der
+Text. Lokal bleibt der Dateipfad der bequemere Weg.
+
+Der Schluessel braucht wie lokal eine leere Passphrase — ein CI-Lauf kann
+niemanden danach fragen. Fuer CI gehoert ohnehin ein eigener Schluessel her,
+nicht der vom Arbeitsplatzrechner.
+
 ## Loslegen
 
 ```bash
