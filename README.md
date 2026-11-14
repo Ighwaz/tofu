@@ -387,6 +387,47 @@ Speziell für LXC:
 - Änderungen an `template`/`template_file_id`, `unprivileged` oder `datastore_id`
   ersetzen den Container.
 
+## State-Backend
+
+Standardmaessig liegt der State als `terraform.tfstate` neben dem Code. Lokal
+ist das in Ordnung. Fuer Semaphore nicht: Ein Runner bekommt pro Lauf ein
+frisches Arbeitsverzeichnis, der State ist danach weg, und der naechste
+Durchgang wuerde VM und Container ein zweites Mal anlegen wollen.
+
+Die Loesung hier ist ein MinIO-Container auf derselben Node. `bootstrap/`
+stellt ihn hin (eigener, lokaler State - die Begruendung steht dort), MinIO
+nimmt danach den State aller anderen Ressourcen auf.
+
+**Reihenfolge:**
+
+1. `bootstrap/` ausfuehren, MinIO installieren, Bucket anlegen -> siehe
+   [bootstrap/README.md](bootstrap/README.md)
+2. Den `backend "s3"`-Block in `versions.tf` einkommentieren und die IP des
+   Containers eintragen
+3. Zugangsdaten in die Umgebung legen und den vorhandenen State umziehen:
+
+   ```powershell
+   $env:AWS_ACCESS_KEY_ID     = '...'
+   $env:AWS_SECRET_ACCESS_KEY = '...'
+   tofu init -migrate-state
+   ```
+
+   OpenTofu fragt, ob der lokale State in den Bucket soll. `yes`.
+
+Danach ist `terraform.tfstate` lokal nur noch eine Leiche - erst loeschen,
+wenn ein `tofu plan` gegen den Bucket sauber durchlaeuft und **keine**
+Aenderungen anzeigt. Zeigt er welche an, ist etwas beim Umzug schiefgegangen;
+dann nicht applyen, sondern nachsehen.
+
+**Sperren:** `use_lockfile = true` legt waehrend eines Laufs eine Lock-Datei
+im Bucket ab. Damit koennen dein Arbeitsplatz und Semaphore nicht gleichzeitig
+schreiben. Das braucht OpenTofu >= 1.10; `tofu version` sagt, was du hast.
+
+**Falls der Upload scheitert** mit einer Meldung ueber Checksummen oder
+`InvalidRequest`: `skip_s3_checksum = true` in den Backend-Block aufnehmen.
+Manche S3-kompatiblen Server stolpern ueber die Pruefsummen, die das Backend
+standardmaessig mitschickt.
+
 ## Auf Forgejo spiegeln
 
 Das Repository liegt auf GitHub (`origin`) und soll zusätzlich auf dem eigenen

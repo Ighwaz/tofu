@@ -11,6 +11,11 @@ crash.*.log
 *.tfvars.json
 !*.tfvars.example
 
+# bootstrap/ haelt seinen State absichtlich lokal (siehe bootstrap/versions.tf).
+# *.tfstate oben faengt ihn schon ab; hier nur zur Erinnerung, dass er nicht
+# verschwinden darf - mitsichern, nicht einchecken.
+bootstrap/.terraform/
+
 # Plan-Dateien
 *.tfplan
 tfplan
