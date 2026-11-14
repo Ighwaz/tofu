@@ -1,0 +1,49 @@
+###############################################################################
+# Kopieren nach bootstrap/terraform.tfvars und anpassen.
+#
+# Dieses Verzeichnis legt genau einen Container an: den MinIO-Server, in dem
+# spaeter der State des Hauptverzeichnisses liegt. Es wird einmal ausgefuehrt
+# und danach fast nie wieder.
+#
+# Achtung: bootstrap/terraform.tfvars und bootstrap/terraform.tfstate sind
+# per .gitignore ausgeschlossen. Der State bleibt hier absichtlich lokal -
+# warum, steht in bootstrap/versions.tf.
+###############################################################################
+
+proxmox_endpoint = "https://192.168.178.10:8006/"
+proxmox_insecure = true
+
+# Wie im Hauptverzeichnis besser als Umgebungsvariable setzen:
+#   $env:TF_VAR_proxmox_api_token = 'tofu@pve!provider=...'
+# proxmox_api_token = "tofu@pve!provider=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+node_name = "procmox"
+name      = "minio"
+vm_id     = 520
+
+# Welche Templates vorliegen, zeigt `pveam list local` auf dem Node.
+template_file_id = "local:vztmpl/debian-13-standard_13.6-1_amd64.tar.zst"
+
+datastore_id = "bigpool"
+cpu_cores    = 2
+memory       = 1024
+disk_size    = 8
+
+# Hier landen die Buckets. 20G ist reichlich: ein State ist wenige hundert
+# KiB gross, der Rest ist Platz fuer Versionsstaende.
+data_path = "/var/lib/minio"
+data_size = "20G"
+
+# MUSS fest sein - die Adresse steht als Endpunkt im Backend-Block des
+# Hauptverzeichnisses. Vorher pruefen, dass sie frei ist und ausserhalb des
+# DHCP-Bereichs der Fritzbox liegt:
+#   ping 192.168.178.61
+ipv4_address = "192.168.178.61/24"
+ipv4_gateway = "192.168.178.1"
+
+dns_servers = ["192.168.178.50"]
+dns_domain  = "lab.home.arpa"
+
+ssh_public_keys = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... tofa@laptop",
+]
