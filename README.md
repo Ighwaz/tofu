@@ -409,12 +409,15 @@ Die Loesung hier ist ein MinIO-Container auf derselben Node. `bootstrap/`
 stellt ihn hin (eigener, lokaler State - die Begruendung steht dort), MinIO
 nimmt danach den State aller anderen Ressourcen auf.
 
-**Reihenfolge:**
+**Reihenfolge** (Schritt 1 und 2 sind erledigt, der Block in `versions.tf`
+ist aktiv):
 
-1. `bootstrap/` ausfuehren, MinIO installieren, Bucket anlegen -> siehe
+1. `bootstrap/` ausfuehren -> siehe
    [bootstrap/README.md](bootstrap/README.md)
-2. Den `backend "s3"`-Block in `versions.tf` einkommentieren und die IP des
-   Containers eintragen
+2. MinIO mit Ansible einrichten:
+   `ansible-playbook playbooks/minio-setup.yml --ask-vault-pass`.
+   Das legt Dienst, Bucket, Versionierung und den Dienstzugang an. Von Hand
+   geht es nicht mehr: dl.min.io antwortet mit HTTP 410 Gone.
 3. Zugangsdaten in die Umgebung legen und den vorhandenen State umziehen:
 
    ```powershell
@@ -433,6 +436,16 @@ dann nicht applyen, sondern nachsehen.
 **Sperren:** `use_lockfile = true` legt waehrend eines Laufs eine Lock-Datei
 im Bucket ab. Damit koennen dein Arbeitsplatz und Semaphore nicht gleichzeitig
 schreiben. Das braucht OpenTofu >= 1.10; `tofu version` sagt, was du hast.
+
+> Das funktioniert mit MinIO, aber ueber einen Umweg, den man kennen sollte.
+> OpenTofu schickt `PutObject` mit `If-None-Match: "*"`. Liegt die Sperrdatei
+> schon, antwortet MinIO mit **304 Not Modified**, wo S3 **412 Precondition
+> Failed** vorschreibt. Es fällt nicht auf, weil OpenTofu nicht auf einen
+> bestimmten Code prueft, sondern jeden Fehler beim Schreiben als "Sperre
+> liegt schon" behandelt — und 304 ist fuer das AWS-SDK ein Fehler. Es
+> scheitert also in der sicheren Richtung. Erwarte nur eine merkwuerdig
+> formulierte Meldung, wenn zwei Laeufe wirklich kollidieren. Nachgelesen in
+> beiden Quelltexten, nicht praktisch erprobt.
 
 **Falls der Upload scheitert** mit einer Meldung ueber Checksummen oder
 `InvalidRequest`: `skip_s3_checksum = true` in den Backend-Block aufnehmen.
