@@ -341,6 +341,18 @@ Katalog steht, bricht der Plan mit einer entsprechenden Meldung ab.
   antwortet. Das setzt voraus, dass `qemu-guest-agent` installiert wird — also
   `cloud_init_snippet = true` und das Paket in `packages`. Sonst läuft der Apply in
   den Timeout.
+- **`ssh_public_keys` will den Schlüssel, nicht den Fingerabdruck.** Erwartet
+  wird der Inhalt einer `.pub`-Datei (`ssh-ed25519 AAAAC3Nza... kommentar`).
+  Ein Fingerabdruck (`SHA256:948/QxWl...`, die Ausgabe von `ssh-keygen -lf`)
+  sieht ähnlich aus, ist aber keiner — cloud-init schreibt ihn klaglos in
+  `authorized_keys`, und erst der Login scheitert mit
+  `Permission denied (publickey)`. Beide Module lehnen das inzwischen beim
+  `plan` ab.
+- **Geänderte SSH-Keys bauen die VM neu.** Die cloud-init-Datei wird dabei
+  ersetzt, und `user_data_file_id` ist beim Provider ForceNew — ein
+  zusätzlicher Schlüssel kostet also einen Neuaufbau der VM. Anders als bei
+  Containern ist das unvermeidbar: cloud-init läuft nur beim ersten Boot, ein
+  bloßes Aktualisieren der Datei bliebe im Gast wirkungslos.
 - **Passwörter** stehen im State im Klartext. Besser nur SSH-Keys verwenden und das
   API-Token über `TF_VAR_proxmox_api_token` setzen statt in eine Datei zu schreiben.
 - **Änderung von `image`, `disk_interface` oder `datastore_id`** ersetzt die VM

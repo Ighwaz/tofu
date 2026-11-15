@@ -133,6 +133,25 @@ resource "proxmox_virtual_environment_container" "this" {
     }
 
     precondition {
+      condition = alltrue([
+        for key in var.ssh_public_keys :
+        can(regex("^(ssh-|ecdsa-|sk-)\\S+ AAAA", key))
+      ])
+      error_message = <<-EOT
+        Container '${var.name}': Mindestens ein Eintrag in ssh_public_keys ist kein
+        oeffentlicher SSH-Schluessel. Erwartet wird eine Zeile der Form
+        'ssh-ed25519 AAAAC3Nza... kommentar', also der INHALT einer .pub-Datei.
+
+        Haeufige Verwechslung: Ein Fingerabdruck ('SHA256:948/QxWl...', die
+        Ausgabe von `ssh-keygen -lf`) sieht aehnlich aus, ist aber keiner -
+        cloud-init schreibt ihn klaglos in authorized_keys, und der Login
+        scheitert danach mit 'Permission denied (publickey)'.
+
+        Den richtigen Wert liefert: Get-Content ~/.ssh/id_ed25519.pub
+      EOT
+    }
+
+    precondition {
       condition     = length(var.ssh_public_keys) > 0 || var.password != null
       error_message = "Container '${var.name}': Es muss mindestens ein SSH-Key oder ein Passwort gesetzt sein, sonst gibt es keinen Login."
     }
