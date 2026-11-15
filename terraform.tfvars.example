@@ -115,8 +115,16 @@ lxc_defaults = {
   disk_size    = 8
   unprivileged = true
 
+  # Hier gehoeren ZWEI Schluessel hinein, nicht einer.
+  #
+  # Der Automationsschluessel muss schon beim Anlegen drauf, sonst kommt
+  # Ansible nie an den Gast: Die Rolle ssh_keys kann ihn nicht nachtragen,
+  # weil sie sich dafuer erst anmelden muesste. In lxc_defaults statt nur im
+  # Container-Eintrag, damit jeder kuenftige Gast ihn von Geburt an hat.
   ssh_public_keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... tofa@laptop",
+    # ansible@control, der ansible-CT -- erreicht von dort aus alle Gaeste
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG4bqZYe1Tx4grAKbWB1AGbTC3EuYG264bQFpqYVc4pb",
   ]
 
   network_interfaces = [{ bridge = "vmbr0" }]
@@ -198,6 +206,33 @@ containers = {
     memory           = 512
     disk_size        = 8
     tags             = ["opentofu", "debian", "lxc"]
+  }
+
+  # Semaphore: Weboberflaeche fuer Ansible- und OpenTofu-Laeufe.
+  # Eigener Gast und NICHT auf docker (103): Dort beendet ein geplanter
+  # Wartungslauf fuer den Docker-Host beim Neustart den Container, der ihn
+  # gerade ausfuehrt. Semaphore haelt ausserdem die Schluessel zu allen
+  # Gaesten -- das verdient eine eigene Grenze.
+  #
+  # Der deb-Weg der Ansible-Rolle braucht kein nesting=1, also auch kein
+  # root@pam fuer den Provider.
+  "semaphore" = {
+    template_file_id = "local:vztmpl/debian-13-standard_13.6-1_amd64.tar.zst"
+    os_type          = "debian"
+    vm_id            = 521
+    description      = "Semaphore - Weboberflaeche fuer Ansible- und OpenTofu-Laeufe"
+    cpu_cores        = 2
+    memory           = 2048
+    swap             = 512
+    disk_size        = 16
+    tags             = ["semaphore", "ansible", "opentofu", "debian", "lxc"]
+
+    # Feste IP: Sie steht im Ansible-Inventar und muss ausserhalb des
+    # DHCP-Bereichs liegen.
+    ip_configs = [{
+      ipv4_address = "192.168.178.63/24"
+      ipv4_gateway = "192.168.178.1"
+    }]
   }
 
   # Variante B: OpenTofu laedt das Template selbst (template_catalog unten)
