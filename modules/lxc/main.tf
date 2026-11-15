@@ -109,6 +109,24 @@ resource "proxmox_virtual_environment_container" "this" {
   }
 
   lifecycle {
+    # SSH-Keys werden beim Anlegen gesetzt und danach nicht mehr abgeglichen.
+    #
+    # Grund: Der Provider behandelt initialization.user_account.keys als
+    # ForceNew. Ein zusaetzlicher Schluessel wuerde den Container also
+    # zerstoeren und neu bauen - ein Preis, der fuer einen Container mit
+    # Daten darin nicht vertretbar ist.
+    #
+    # Folge, die man kennen muss: Eine Aenderung an var.ssh_public_keys wirkt
+    # nur noch auf NEUE Container. Bestehende behalten ihre Keys, und `plan`
+    # meldet dazu nichts. Zugaenge im laufenden Gast sind ohnehin Ansibles
+    # Zustaendigkeit, nicht die von OpenTofu.
+    #
+    # Nicht abschaltbar: ignore_changes erlaubt keine Variablen, der Block
+    # muss statisch sein. Bewusst nur `keys` und nicht der ganze
+    # user_account-Block - ein geaendertes Passwort soll weiterhin auffallen,
+    # auch wenn es denselben Replace ausloest.
+    ignore_changes = [initialization[0].user_account[0].keys]
+
     precondition {
       condition     = var.template_file_id != null
       error_message = "Container '${var.name}': Es muss entweder 'template' (Eintrag aus var.template_catalog) oder 'template_file_id' gesetzt sein."
