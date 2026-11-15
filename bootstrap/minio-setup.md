@@ -57,8 +57,14 @@ Eigentümer muss der Benutzer sein, unter dem der Dienst läuft — beim
 
 ### 2. MinIO installieren
 
-Paket von `https://dl.min.io/server/minio/release/linux-amd64/minio.deb`,
-per `apt`/`dpkg`. Das Paket bringt Binary, systemd-Unit und den Benutzer mit.
+**Nicht mehr von `dl.min.io`** — beide früher hier genannten URLs antworten
+seit 2025 mit `HTTP 410 Gone`. MinIO gibt die freie Fassung nur noch als
+Quelltext heraus; die fertigen Pakete gehören zum kostenpflichtigen AIStor.
+
+Welche gepinnten GitHub-Releases stattdessen funktionieren und welche
+Eigenheiten sie mitbringen (fehlendes `postinst`, kein `minio-user`), steht
+in [README.md](README.md) unter *Von Hand geht nicht mehr so, wie es hier mal
+stand*.
 
 Idempotent über eine Versionsprüfung (`minio --version`) statt blindem
 Herunterladen bei jedem Lauf.
@@ -82,21 +88,25 @@ Bei Änderung: `notify` auf einen Neustart von `minio`.
 `systemd`-Unit `minio` aktivieren und starten. Danach muss
 `http://127.0.0.1:9000/minio/health/live` mit 200 antworten.
 
-### 5. `mc` installieren
+### 5. Client installieren
 
-Von `https://dl.min.io/client/mc/release/linux-amd64/mc`, nach
-`/usr/local/bin/mc`, Modus `0755`. Auch hier Versionsprüfung statt
-Dauer-Download.
+Das Client-Paket heißt **`mcli`**, nicht `mc` — so weicht es dem
+Namenskonflikt mit Midnight Commander auf Debian aus. Die Binärdatei landet
+als `/usr/local/bin/mcli`, und genau so heißt der Befehl auf dem Container.
+Alle Beispiele unten verwenden ihn.
+
+Bezugsquelle wie bei Schritt 2: siehe [README.md](README.md), nicht
+`dl.min.io`.
 
 ### 6. Alias, Bucket, Versionierung
 
 ```bash
-mc alias set local http://127.0.0.1:9000 <root-user> <root-password>
-mc mb --ignore-existing local/tofu-state
-mc version enable local/tofu-state
+mcli alias set local http://127.0.0.1:9000 <root-user> <root-password>
+mcli mb --ignore-existing local/tofu-state
+mcli version enable local/tofu-state
 ```
 
-`--ignore-existing` macht `mb` idempotent. `mc version enable` ist ebenfalls
+`--ignore-existing` macht `mb` idempotent. `mcli version enable` ist ebenfalls
 wiederholbar.
 
 **Versionierung ist nicht optional.** Ein State, dessen Schreibvorgang
@@ -110,7 +120,7 @@ Stand zurück. Das ist der einzige Schutz, den du hast, wenn beim
 Service-Account mit fest vorgegebenen Schlüsseln aus dem Vault:
 
 ```bash
-mc admin user svcacct add local <root-user> \
+mcli admin user svcacct add local <root-user> \
   --access-key  <aus Vault> \
   --secret-key  <aus Vault>
 ```
@@ -123,7 +133,7 @@ die Rolle beliebig oft.
 Der Befehl schlägt fehl, wenn der Account schon existiert. Vorher prüfen:
 
 ```bash
-mc admin user svcacct ls local <root-user>
+mcli admin user svcacct ls local <root-user>
 ```
 
 und nur anlegen, wenn der Access Key dort nicht auftaucht.
@@ -150,8 +160,8 @@ Auf dem Container:
 ```bash
 systemctl is-active minio                       # -> active
 curl -fsS http://127.0.0.1:9000/minio/health/live && echo OK
-mc ls local/                                    # -> tofu-state
-mc version info local/tofu-state                # -> Enabled
+mcli ls local/                                    # -> tofu-state
+mcli version info local/tofu-state                # -> Enabled
 ```
 
 Vom Arbeitsplatzrechner aus — das ist der eigentliche Test, denn von dort
