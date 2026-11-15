@@ -274,6 +274,38 @@ containers = {
 }
 ```
 
+### Der Automationsschlüssel gehört in `lxc_defaults`
+
+In `ssh_public_keys` gehören **zwei** Schlüssel: dein eigener und der, mit dem
+Ansible arbeitet.
+
+Der Grund ist eine Reihenfolge, die sich nicht auflösen lässt: Ansible kann
+einen Gast erst konfigurieren, wenn es sich dort anmelden kann — und die Rolle
+`ssh_keys`, die Schlüssel verteilt, müsste sich dafür ebenfalls erst anmelden.
+Fehlt der Schlüssel beim Anlegen, kommt Ansible nie an den Container, und
+nachtragen lässt er sich nur von Hand über `pct exec`.
+
+Deshalb in `lxc_defaults` und nicht nur im einzelnen Container-Eintrag: So
+trägt jeder künftige Gast ihn von Geburt an.
+
+```hcl
+lxc_defaults = {
+  ssh_public_keys = [
+    "ssh-ed25519 AAAA... tofa@laptop",
+    "ssh-ed25519 AAAA... ansible@control",   # der ansible-CT
+  ]
+}
+```
+
+Der zweite Teil liegt nicht hier: `ansible.cfg` im Ansible-Repository hat
+`host_key_checking = True`. Ein unbeaufsichtigter Lauf scheitert daher am
+unbekannten Hostschlüssel des neuen Gasts, statt zu fragen. Einmal vom
+Kontrollknoten aus:
+
+```bash
+ssh-keyscan -H <neue-ip> >> ~/.ssh/known_hosts
+```
+
 ### Woher kommt das Template?
 
 Anders als bei den Cloud-Images gibt es für LXC-Templates **keine `latest`-URL** — die
