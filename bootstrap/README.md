@@ -50,55 +50,79 @@ später im Backend-Block. Vorher prüfen, dass sie frei ist:
 ping 192.168.178.61
 ```
 
-### 2. MinIO installieren
+### 2. MinIO einrichten
 
 Das macht dieses Verzeichnis **nicht**. OpenTofu stellt den Container hin,
-eingerichtet wird mit Ansible — dieselbe Trennung wie beim Rest deines
-Homelabs. Für den ersten Lauf geht es auch von Hand.
-
-**Für die Ansible-Rolle gibt es eine ausführliche Vorgabe:
-[minio-setup.md](minio-setup.md)** — mit Inventory-Eintrag, benötigten
-Vault-Variablen, Hinweisen zur Idempotenz und Abnahmekriterien.
-
-Der Ablauf in Stichworten (gegen die
-[offizielle MinIO-Doku](https://min.io/docs/minio/linux/operations/install-deploy-manage/deploy-minio-single-node-single-drive.html)
-gegenprüfen — MinIOs Paketierung hat sich in den letzten Releases mehrfach
-bewegt, und diese Schritte sind ungetestet):
+eingerichtet wird mit Ansible — dieselbe Trennung wie beim Rest des Homelabs.
+Die Rolle `minio_server` im Ansible-Repository erledigt es:
 
 ```bash
-# im Container
-apt-get update && apt-get install -y wget
-wget https://dl.min.io/server/minio/release/linux-amd64/minio.deb
-dpkg -i minio.deb
-
-cat > /etc/default/minio <<'EOF'
-MINIO_VOLUMES="/var/lib/minio"
-MINIO_OPTS="--address :9000 --console-address :9001"
-MINIO_ROOT_USER=admin
-MINIO_ROOT_PASSWORD=<langes-zufaelliges-passwort>
-EOF
-
-chown -R minio-user:minio-user /var/lib/minio
-systemctl enable --now minio
-systemctl status minio
+# auf dem Ansible-Kontrollknoten
+ansible-playbook playbooks/minio-setup.yml --ask-vault-pass
 ```
 
-Dann Bucket und einen eigenen Zugangsschlüssel anlegen (nicht den
-Root-Benutzer für den State verwenden):
+Sie installiert MinIO und den Client, legt Dienstnutzer, Datenverzeichnis,
+Umgebungsdatei und systemd-Unit an, erzeugt den Bucket, schaltet die
+Versionierung ein und legt den Dienstzugang für OpenTofu an. Ein zweiter Lauf
+meldet `changed=0`.
+
+Gebraucht werden vier Werte im Ansible-Vault: `vault_minio_root_user`,
+`vault_minio_root_password`, `vault_minio_tofu_access_key` und
+`vault_minio_tofu_secret_key`. Die Einzelheiten stehen im README des
+Ansible-Repositorys unter *MinIO: Ablage für den OpenTofu-State*.
+
+> **Längen beachten.** MinIO setzt sie an zwei Stellen unterschiedlich durch:
+> Root-Benutzer ab 3 und Root-Passwort ab 8 Zeichen, beide **ohne**
+> Obergrenze — der Tofu-Access-Key dagegen 3 bis 20 und das Tofu-Secret 8 bis
+> **40** Zeichen. Ein zu langes Tofu-Secret fällt erst beim Anlegen des
+> Dienstzugangs auf. Die Rolle prüft es inzwischen vorab.
+
+#### Von Hand geht nicht mehr so, wie es hier mal stand
+
+Die frühere Anleitung in diesem Abschnitt ist nicht bloß überholt, sie
+funktioniert nicht: Beide Downloads antworten mit **HTTP 410 Gone**.
+
+```
+https://dl.min.io/server/minio/release/linux-amd64/minio.deb   -> 410
+https://dl.min.io/client/mc/release/linux-amd64/mc             -> 410
+```
+
+MinIO gibt die freie Fassung seit 2025 nur noch als Quelltext heraus; die
+fertigen Pakete gehören zum kostenpflichtigen AIStor. Die Ansible-Rolle holt
+deshalb gepinnte Pakete aus den GitHub-Releases:
+
+| | |
+|---|---|
+| Server | `RELEASE.2024-12-18T13-15-44Z`, Paket `minio` |
+| Client | `RELEASE.2025-08-13T08-35-41Z`, Paket **`mcli`** |
+
+Zwei Dinge, über die man sonst stolpert:
+
+- Das Client-Paket heißt `mcli` und legt die Binärdatei als
+  `/usr/local/bin/mcli` ab, **nicht** als `mc` — so weicht es dem
+  Namenskonflikt mit Midnight Commander aus. Auf dem Container heißt der
+  Befehl also `mcli`.
+- Das Server-Paket bringt **kein `postinst`** mit, legt also weder Benutzer
+  noch Gruppe an, obwohl seine Unit `User=minio-user` verlangt. Die Rolle
+  legt den Benutzer selbst an.
+
+> **Diese Server-Fassung bekommt keine Sicherheitsaktualisierungen mehr.**
+> Darum gehört MinIO hier nicht über Traefik nach außen und bekommt keinen
+> öffentlichen Host: erreichbar nur im LAN. Sobald dort Daten liegen, die
+> mehr als dieses Labor betreffen, ist das der Moment zu wechseln — Garage
+> und SeaweedFS sprechen dasselbe S3 und werden gepflegt.
+
+### Abnahme
+
+Auf dem Container, **ohne** `curl` — den bringt ein schlanker
+Debian-Container nicht mit, Python ist dagegen immer da:
 
 ```bash
-wget https://dl.min.io/client/mc/release/linux-amd64/mc -O /usr/local/bin/mc
-chmod +x /usr/local/bin/mc
-
-mc alias set local http://127.0.0.1:9000 admin <passwort>
-mc mb local/tofu-state
-mc version enable local/tofu-state          # Versionierung: rettet dich bei einem kaputten State
-mc admin user svcacct add local admin       # gibt Access Key + Secret aus
+systemctl is-active minio
+python3 -c 'import urllib.request as u; print(u.urlopen("http://127.0.0.1:9000/minio/health/live").status)'
 ```
 
-`mc version enable` ist kein Luxus. Ein State, der beim Schreiben
-abgeschnitten wird, ist sonst weg; mit Versionierung holst du den letzten
-heilen Stand zurück.
+Die letzte Zeile muss `200` ausgeben.
 
 ### 3. Backend im Hauptverzeichnis
 
