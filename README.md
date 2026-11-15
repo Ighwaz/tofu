@@ -386,6 +386,17 @@ Speziell für LXC:
   mit Einheit (`"50G"`) — das gibt die Proxmox-API so vor.
 - Änderungen an `template`/`template_file_id`, `unprivileged` oder `datastore_id`
   ersetzen den Container.
+- **`ssh_public_keys` wirkt nur beim Anlegen.** Der Provider behandelt die
+  Key-Liste als ForceNew — ein nachträglich ergänzter Schlüssel würde den
+  Container zerstören und neu bauen. Das Modul ignoriert Änderungen daran
+  deshalb (`ignore_changes`). Praktisch heißt das: Du ergänzt einen Schlüssel
+  in der tfvars, `plan` meldet *keine* Änderung, und der laufende Container
+  behält seine alten Keys. Zugänge im Gast pflegt Ansible, nicht OpenTofu.
+  Soll ein bestehender Container die neue Liste wirklich bekommen, muss er
+  von Hand ersetzt werden — mit allem, was darin liegt.
+- `password` hat dieselbe Eigenschaft, wird aber **nicht** ignoriert: Eine
+  Änderung dort löst weiterhin einen Replace aus und soll das auch, damit sie
+  nicht unbemerkt wirkungslos bleibt.
 
 ## State-Backend
 
