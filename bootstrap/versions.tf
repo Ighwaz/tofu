@@ -16,8 +16,16 @@ terraform {
   # in MinIO liegen muesste.
   #
   # bootstrap/terraform.tfstate bleibt deshalb lokal. Er beschreibt genau
-  # einen Container und aendert sich praktisch nie. Er enthaelt trotzdem das
-  # API-Token im Klartext: nicht einchecken (die .gitignore faengt ihn ab),
-  # aber mitsichern - ohne ihn verliert OpenTofu die Zuordnung zu Container
-  # und Volume, und ein erneutes apply wollte beides neu anlegen.
+  # einen Container und aendert sich praktisch nie.
+  #
+  # Mitsichern: Ohne ihn verliert OpenTofu die Zuordnung zu Container und
+  # Volume, und ein erneutes apply wollte beides neu anlegen.
+  #
+  # Nicht einchecken (die .gitignore faengt ihn ab). Das API-Token steht
+  # allerdings NICHT darin - ein State haelt Ressourcen-Attribute und
+  # Outputs, nicht die Provider-Konfiguration und nicht die Werte der
+  # Eingabevariablen. Was hier sehr wohl drinsteht, sind Attribute der
+  # Ressourcen selbst: bei Containern ein gesetztes root-Passwort, im
+  # Hauptverzeichnis ausserdem die komplette cloud-init-Datei mit den
+  # SSH-Keys. Grund genug, ihn nicht aus der Hand zu geben.
 }
