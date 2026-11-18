@@ -11,6 +11,20 @@ resource "proxmox_download_file" "cloud_image" {
   checksum_algorithm  = each.value.spec.checksum_algorithm != "" ? each.value.spec.checksum_algorithm : null
   overwrite_unmanaged = true
 
+  # NICHT nachladen, wenn sich die Datei unter der URL aendert. Die Debian-URL
+  # zeigt auf "latest"; mit dem Vorgabewert true vergleicht der Provider bei
+  # jedem Plan die Groesse und ersetzt die Datei, sobald Debian ein neues
+  # Abbild veroeffentlicht. Am 18.11.2026 so geschehen: 341901312 ->
+  # 344260608 Byte, und weil die Platte jeder VM an der file_id haengt,
+  # wollte der Plan daraufhin semaphore (530) und tofu-debian (501) loeschen
+  # und neu bauen.
+  #
+  # Mit false prueft der Provider keine Groesse mehr und ersetzt nie von
+  # selbst (Doku bpg/proxmox 0.122.0). Ein neues Abbild holt man bewusst:
+  #   tofu apply -replace='proxmox_download_file.cloud_image["<node>|<image>"]'
+  # Bestehende VMs bleiben davon unberuehrt, siehe ignore_changes im Modul vm.
+  overwrite = false
+
   lifecycle {
     precondition {
       condition     = each.value.known
