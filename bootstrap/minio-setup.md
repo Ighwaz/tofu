@@ -1,5 +1,11 @@
 # MinIO einrichten — Vorgabe für die Ansible-Rolle
 
+> **Überholt.** Das war die Vorgabe, bevor es die Ansible-Rolle gab. Heute
+> richtet `playbooks/minio-setup.yml` im Ansible-Repository den Server ein,
+> und das ist inzwischen Silo statt MinIO. Die Downloads unten antworten mit
+> HTTP 410. Stehen geblieben ist das Dokument nur wegen der
+> Abnahmekriterien; maßgeblich ist [README.md](README.md).
+
 Dieses Dokument beschreibt, was nach `tofu apply` in `bootstrap/` noch zu tun
 ist. Es ist die Schnittstelle zwischen diesem Repo und dem Ansible-Repo:
 OpenTofu stellt den Container hin, Ansible richtet ihn ein.

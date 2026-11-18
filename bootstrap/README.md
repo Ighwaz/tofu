@@ -1,12 +1,16 @@
 # bootstrap — der Speicher für den State
 
-Dieses Verzeichnis legt **einen** LXC-Container an: einen MinIO-Server, der
-den OpenTofu-State des Hauptverzeichnisses aufnimmt.
+Dieses Verzeichnis legt **einen** LXC-Container an (VMID 520,
+`192.168.178.62`): den S3-Server, der den OpenTofu-State des
+Hauptverzeichnisses aufnimmt. Darauf läuft seit dem 18.11.2026
+[Silo](https://github.com/pgsty/silo), eine gepflegte Abspaltung von MinIO;
+vorher war es MinIO selbst. Container, Ressource und Variablen heißen
+weiterhin `minio`, damit sich am State nichts ändert.
 
 ## Warum ein eigenes Verzeichnis
 
-Weil es sonst ein Kreis wäre. Der State des Hauptverzeichnisses soll in MinIO
-liegen. Läge der State des MinIO-Containers ebenfalls dort, müsste MinIO schon
+Weil es sonst ein Kreis wäre. Der State des Hauptverzeichnisses soll in Silo
+liegen. Läge der State des Silo-Containers ebenfalls dort, müsste Silo schon
 laufen, bevor es angelegt werden kann.
 
 Also: `bootstrap/` hat seinen eigenen, **lokalen** State. Er beschreibt genau
@@ -27,7 +31,7 @@ Löschen, auch aus der Oberfläche heraus.
 
 ```
 1. bootstrap/  →  Container anlegen          (State lokal)
-2. von Hand    →  MinIO installieren, Bucket anlegen
+2. Ansible     →  Silo installieren, Bucket anlegen
 3. Hauptverz.  →  Backend-Block eintragen, State migrieren
 ```
 
@@ -50,7 +54,7 @@ später im Backend-Block. Vorher prüfen, dass sie frei ist:
 ping 192.168.178.61
 ```
 
-### 2. MinIO einrichten
+### 2. Silo einrichten
 
 Das macht dieses Verzeichnis **nicht**. OpenTofu stellt den Container hin,
 eingerichtet wird mit Ansible — dieselbe Trennung wie beim Rest des Homelabs.
@@ -61,7 +65,7 @@ Die Rolle `minio_server` im Ansible-Repository erledigt es:
 ansible-playbook playbooks/minio-setup.yml --ask-vault-pass
 ```
 
-Sie installiert MinIO und den Client, legt Dienstnutzer, Datenverzeichnis,
+Sie installiert Silo und den Client `mcli`, legt Dienstnutzer, Datenverzeichnis,
 Umgebungsdatei und systemd-Unit an, erzeugt den Bucket, schaltet die
 Versionierung ein und legt den Dienstzugang für OpenTofu an. Ein zweiter Lauf
 meldet `changed=0`.
@@ -69,48 +73,35 @@ meldet `changed=0`.
 Gebraucht werden vier Werte im Ansible-Vault: `vault_minio_root_user`,
 `vault_minio_root_password`, `vault_minio_tofu_access_key` und
 `vault_minio_tofu_secret_key`. Die Einzelheiten stehen im README des
-Ansible-Repositorys unter *MinIO: Ablage für den OpenTofu-State*.
+Ansible-Repositorys unter *Silo: Ablage für den OpenTofu-State*; dort steht
+auch, wie der Umzug von MinIO auf Silo lief.
 
-> **Längen beachten.** MinIO setzt sie an zwei Stellen unterschiedlich durch:
+> **Längen beachten.** Die Grenzen gelten an zwei Stellen unterschiedlich:
 > Root-Benutzer ab 3 und Root-Passwort ab 8 Zeichen, beide **ohne**
 > Obergrenze — der Tofu-Access-Key dagegen 3 bis 20 und das Tofu-Secret 8 bis
 > **40** Zeichen. Ein zu langes Tofu-Secret fällt erst beim Anlegen des
 > Dienstzugangs auf. Die Rolle prüft es inzwischen vorab.
 
-#### Von Hand geht nicht mehr so, wie es hier mal stand
+#### Warum Silo und nicht mehr MinIO
 
-Die frühere Anleitung in diesem Abschnitt ist nicht bloß überholt, sie
-funktioniert nicht: Beide Downloads antworten mit **HTTP 410 Gone**.
-
-```
-https://dl.min.io/server/minio/release/linux-amd64/minio.deb   -> 410
-https://dl.min.io/client/mc/release/linux-amd64/mc             -> 410
-```
-
-MinIO gibt die freie Fassung seit 2025 nur noch als Quelltext heraus; die
-fertigen Pakete gehören zum kostenpflichtigen AIStor. Die Ansible-Rolle holt
-deshalb gepinnte Pakete aus den GitHub-Releases:
+Die fertigen Pakete von MinIO sind nicht mehr zu haben: `dl.min.io` antwortet
+mit **HTTP 410 Gone**, die freie Fassung gibt es seit 2025 nur noch als
+Quelltext. Die letzte gebaute Fassung (`RELEASE.2024-12-18T13-15-44Z`) bekam
+keine Sicherheitsaktualisierungen mehr. Silo führt den Code weiter und
+liefert Pakete; die Ansible-Rolle holt sie gepinnt und mit Prüfsumme aus den
+GitHub-Releases:
 
 | | |
 |---|---|
-| Server | `RELEASE.2024-12-18T13-15-44Z`, Paket `minio` |
-| Client | `RELEASE.2025-08-13T08-35-41Z`, Paket **`mcli`** |
+| Server | `RELEASE.2026-11-12T00-00-00Z`, Paket `silo` (Dienst `silo.service`) |
+| Client | dieselbe Fassung, Paket **`mcli`** |
 
-Zwei Dinge, über die man sonst stolpert:
+Der Client liegt als `/usr/local/bin/mcli`, **nicht** als `mc`: So weicht er
+dem Namenskonflikt mit Midnight Commander aus.
 
-- Das Client-Paket heißt `mcli` und legt die Binärdatei als
-  `/usr/local/bin/mcli` ab, **nicht** als `mc` — so weicht es dem
-  Namenskonflikt mit Midnight Commander aus. Auf dem Container heißt der
-  Befehl also `mcli`.
-- Das Server-Paket bringt **kein `postinst`** mit, legt also weder Benutzer
-  noch Gruppe an, obwohl seine Unit `User=minio-user` verlangt. Die Rolle
-  legt den Benutzer selbst an.
-
-> **Diese Server-Fassung bekommt keine Sicherheitsaktualisierungen mehr.**
-> Darum gehört MinIO hier nicht über Traefik nach außen und bekommt keinen
-> öffentlichen Host: erreichbar nur im LAN. Sobald dort Daten liegen, die
-> mehr als dieses Labor betreffen, ist das der Moment zu wechseln — Garage
-> und SeaweedFS sprechen dasselbe S3 und werden gepflegt.
+Die Weboberfläche läuft über Traefik unter `https://silo.lab.home.arpa`, mit
+Anmeldung über Authelia. Die S3-Schnittstelle auf Port 9000 dagegen läuft
+nicht über Traefik und bleibt im LAN.
 
 ### Abnahme
 
@@ -118,7 +109,7 @@ Auf dem Container, **ohne** `curl` — den bringt ein schlanker
 Debian-Container nicht mit, Python ist dagegen immer da:
 
 ```bash
-systemctl is-active minio
+systemctl is-active silo
 python3 -c 'import urllib.request as u; print(u.urlopen("http://127.0.0.1:9000/minio/health/live").status)'
 ```
 
@@ -130,9 +121,8 @@ Siehe den Abschnitt **State-Backend** in der README im Wurzelverzeichnis.
 
 ## Was hier absichtlich fehlt
 
-Kein TLS. MinIO läuft im LAN auf `http://`, und der Backend-Block spricht es
+Kein TLS auf der S3-Schnittstelle. Silo läuft im LAN auf `http://`, und der Backend-Block spricht es
 unverschlüsselt an. Für ein Heimnetz hinter dem eigenen Router ist das
 vertretbar, aber es ist eine bewusste Abwägung, keine Lücke aus Versehen:
 Access Key und Secret gehen damit im Klartext über dein LAN. Wer das nicht
-will, legt ein Zertifikat in `/etc/minio/certs/` und stellt den Endpunkt auf
-`https://` um.
+will, gibt Silo ein Zertifikat und stellt den Endpunkt auf `https://` um.
