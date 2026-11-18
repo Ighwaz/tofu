@@ -176,6 +176,21 @@ Der Dateiname muss auf `.img` oder `.iso` enden — Proxmox akzeptiert im
 Content-Type `iso` nichts anderes, auch wenn der Inhalt ein qcow2 ist.
 Ein Image wird pro Node einmal geladen, auf dem es gebraucht wird.
 
+**Ein geladenes Image wird nicht von selbst erneuert** (`overwrite = false`).
+Die `latest`-URLs liefern bei jeder neuen Distributionsfassung eine andere
+Datei. Mit dem Vorgabewert des Providers wollte deshalb am 18.11.2026 ein
+gewöhnliches `tofu plan` das Debian-13-Image neu laden und damit **jede VM neu
+bauen**, die daraus entstanden ist (`semaphore` und `tofu-debian`). Erneuern
+heißt jetzt, es bewusst anzustoßen:
+
+```bash
+tofu apply -replace='proxmox_download_file.cloud_image["procmox|debian-13"]'
+```
+
+Bestehende VMs bleiben dabei, wie sie sind. Das Image zählt nur beim Anlegen,
+danach gehört die Platte der VM (`ignore_changes` auf `disk[0].file_id` im
+Modul `vm`). Neue VMs bekommen das erneuerte Image.
+
 ## Wichtige Optionen pro VM
 
 | Feld | Bedeutung | Default |
@@ -387,8 +402,12 @@ Katalog steht, bricht der Plan mit einer entsprechenden Meldung ab.
   bloßes Aktualisieren der Datei bliebe im Gast wirkungslos.
 - **Passwörter** stehen im State im Klartext. Besser nur SSH-Keys verwenden und das
   API-Token über `TF_VAR_proxmox_api_token` setzen statt in eine Datei zu schreiben.
-- **Änderung von `image`, `disk_interface` oder `datastore_id`** ersetzt die VM
+- **Änderung von `disk_interface` oder `datastore_id`** ersetzt die VM
   (Disk wird neu erstellt).
+- **Eine Änderung von `image` wirkt nur bei neuen VMs.** Eine bestehende VM
+  bleibt auf ihrer Platte, sonst bräche jede neue Image-Fassung alle VMs ab.
+  Soll eine VM wirklich aus dem neuen Image neu entstehen:
+  `tofu apply -replace='module.vm["<name>"].proxmox_virtual_environment_vm.this'`.
 - Der State liegt standardmäßig lokal in `terraform.tfstate` und enthält
   Zugangsdaten — nicht einchecken (ist per `.gitignore` ausgeschlossen). Für den
   Mehrbenutzerbetrieb den Backend-Block in `versions.tf` ausfüllen.

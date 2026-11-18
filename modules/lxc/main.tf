@@ -2,8 +2,9 @@ resource "proxmox_virtual_environment_container" "this" {
   node_name   = var.node_name
   vm_id       = var.vm_id
   description = var.description
-  tags        = var.tags
-  pool_id     = var.pool_id
+  # Sortiert wie im Modul vm: Proxmox gibt die Tags sortiert zurueck.
+  tags    = sort(distinct(var.tags))
+  pool_id = var.pool_id
 
   unprivileged  = var.unprivileged
   start_on_boot = var.start_on_boot

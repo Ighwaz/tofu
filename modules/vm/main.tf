@@ -57,10 +57,12 @@ resource "proxmox_virtual_environment_file" "user_data" {
 resource "proxmox_virtual_environment_vm" "this" {
   name        = var.name
   description = var.description
-  tags        = var.tags
-  node_name   = var.node_name
-  vm_id       = var.vm_id
-  pool_id     = var.pool_id
+  # Sortiert: Proxmox gibt die Tags sortiert zurueck. In anderer Reihenfolge
+  # zeigte jeder Plan eine Aenderung, ohne dass sich etwas aendert.
+  tags      = sort(distinct(var.tags))
+  node_name = var.node_name
+  vm_id     = var.vm_id
+  pool_id   = var.pool_id
 
   on_boot         = var.on_boot
   started         = var.started
@@ -212,6 +214,16 @@ resource "proxmox_virtual_environment_vm" "this" {
   serial_device {}
 
   lifecycle {
+    # Das Abbild zaehlt nur beim Anlegen: Die Boot-Platte wird daraus geklont
+    # und gehoert danach der VM. Ohne diese Zeile erzwingt jede neue file_id
+    # (file_id ist ForceNew) das Loeschen und Neubauen der VM samt Platte --
+    # etwa wenn das Abbild bewusst erneuert wird. Neue VMs bekommen trotzdem
+    # das jeweils aktuelle Abbild.
+    #
+    # disk[0] ist die Boot-Platte: Sie steht oben als erster disk-Block, die
+    # Zusatzplatten folgen dahinter.
+    ignore_changes = [disk[0].file_id]
+
     precondition {
       condition     = length(var.ssh_public_keys) > 0 || var.password != null
       error_message = "VM '${var.name}': Es muss mindestens ein SSH-Key oder ein Passwort gesetzt sein, sonst gibt es keinen Login."
