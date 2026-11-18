@@ -97,7 +97,7 @@ variable "mount_points" {
 }
 
 variable "features" {
-  description = "LXC-Features. nesting wird z. B. fuer Docker im Container gebraucht; Aenderungen erfordern meist root@pam."
+  description = "LXC-Features. nesting wird z. B. fuer Docker im Container gebraucht. Beim Anlegen genuegt fuer nesting allein ein API-Token mit VM.Allocate; fuse, keyctl, mount und jede spaetere Aenderung verlangen root@pam."
   type = object({
     nesting = optional(bool, false)
     fuse    = optional(bool, false)

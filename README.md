@@ -432,18 +432,34 @@ Speziell auf `procmox`:
   taugt nur `nas-backup`; das betrifft OpenTofu nicht direkt, wohl aber jeden
   Plan, die Gäste anschließend zu sichern.
 
+**Feste IPs gehören unter `.20`.** Die FritzBox vergibt per DHCP `.20` bis
+`.200`. Eine feste IP in diesem Bereich vergibt sie früher oder später an ein
+anderes Gerät, sobald der Gast einmal aus ist -- so geschehen mit `.87` (PBS)
+und `.162` (Kontrollknoten). Frei für Infrastruktur sind `.2` bis `.19`
+(belegt: `.1` FritzBox, `.10` procmox, `.11` NetBox). Wer schon eine feste IP
+im DHCP-Bereich hat (Silo `.62`, Semaphore `.63`), bekommt in der FritzBox
+eine Reservierung ("Diesem Netzwerkgerät immer die gleiche IPv4-Adresse
+zuweisen").
+
 Speziell für LXC:
 
 - **Debian 13 im Container will `nesting`.** Beim Anlegen warnt PVE mit
   `Systemd 257 detected. You may need to enable nesting.` Ob es stoert, zeigt
   `pct exec <vmid> -- systemctl is-system-running`: bei `degraded` in der
-  tfvars `features = { nesting = true }` setzen. Achtung, das verlangt je nach
-  PVE-Version `root@pam` und wird einem API-Token verweigert.
+  tfvars `features = { nesting = true }` setzen. Das geht beim Anlegen auch mit
+  dem API-Token, siehe den nächsten Punkt.
 - **Container haben kein cloud-init.** SSH-Keys und Passwort gehen direkt an `root`,
   eine Paketinstallation beim ersten Start gibt es nicht — dafür sind sie in Sekunden
   statt Minuten da.
-- **`features` wie `nesting` erfordern in der Regel `root@pam`.** Ein API-Token mit
-  PVEAdmin reicht dafür nicht; PVE lehnt das Setzen sonst ab.
+- **`nesting` allein geht mit dem API-Token, alles andere nicht.** PVE erlaubt
+  bei unprivilegierten Containern `nesting` jedem mit `VM.Allocate`; `fuse`,
+  `keyctl` und `mount` nur `root@pam` (`check_ct_modify_config_perm` in
+  pve-container). Der Provider schickt beim **Anlegen** nur die Flags, die auf
+  `true` stehen, also genau `nesting=1`. Beim **Ändern** der `features` schickt
+  er dagegen alle mit, auch `keyctl=0` und `fuse=0` (bpg/proxmox v0.122.0,
+  `containerGetFeaturesForUpdate`) -- dann verlangt PVE doch `root@pam`.
+  Deshalb `features` beim Anlegen richtig setzen und danach nicht mehr
+  anfassen.
 - **Kein Guest-Agent**, also auch keine per Agent gemeldete IP. Bei statischer IP steht
   sie ohnehin in der Konfiguration, bei DHCP hilft die PVE-Oberfläche.
 - `disk_size` ist eine Zahl in GiB, die `size` eines `mount_points` dagegen ein String

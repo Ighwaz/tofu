@@ -136,13 +136,31 @@ lxc_defaults = {
 ###############################################################################
 # Die einzelnen VMs
 #
-# VMID-Vergabe: auf procmox sind 100-106, 110, 112, 114, 150, 203 und 209
-# belegt oder reserviert (siehe Ansible-Inventory). Damit sich OpenTofu und
+# VMID-Vergabe: auf procmox sind 100-106, 112, 150 und 203 belegt oder
+# reserviert (siehe Ansible-Inventory). Damit sich OpenTofu und
 # die bestehenden Gaeste nicht in die Quere kommen, liegt alles, was von hier
 # verwaltet wird, ab 500. vm_id weglassen geht auch - dann vergibt PVE selbst.
 ###############################################################################
 
 vms = {
+  # Semaphore: Weboberflaeche fuer Ansible- und OpenTofu-Laeufe. Eine VM und
+  # kein Container (Begruendung im README des Ansible-Repos). Die feste IP
+  # .63 liegt im DHCP-Bereich der FritzBox -- dort deshalb als Reservierung
+  # eintragen, sonst vergibt die FritzBox sie an ein anderes Geraet.
+  "semaphore" = {
+    image     = "debian-13"
+    vm_id     = 530
+    cpu_cores = 2
+    memory    = 4096
+    disk_size = 40
+    tags      = ["semaphore", "opentofu", "debian"]
+
+    ip_configs = [{
+      ipv4_address = "192.168.178.63/24"
+      ipv4_gateway = "192.168.178.1"
+    }]
+  }
+
   # Debian 13 mit DHCP
   "tofu-debian" = {
     image     = "debian-13"
@@ -168,7 +186,7 @@ vms = {
   #   }]
   # }
 
-  # Ubuntu 24.04 mit fester IP ausserhalb des DHCP-Bereichs
+  # Ubuntu 24.04 mit fester IP unterhalb des DHCP-Bereichs (.20 bis .200)
   # "tofu-ubuntu" = {
   #   image     = "ubuntu-24.04"
   #   vm_id     = 502
@@ -177,7 +195,7 @@ vms = {
   #   disk_size = 40
   #
   #   ip_configs = [{
-  #     ipv4_address = "192.168.178.60/24"
+  #     ipv4_address = "192.168.178.12/24"
   #     ipv4_gateway = "192.168.178.1"
   #   }]
   #
@@ -208,29 +226,29 @@ containers = {
     tags             = ["opentofu", "debian", "lxc"]
   }
 
-  # Semaphore: Weboberflaeche fuer Ansible- und OpenTofu-Laeufe.
-  # Eigener Gast und NICHT auf docker (103): Dort beendet ein geplanter
-  # Wartungslauf fuer den Docker-Host beim Neustart den Container, der ihn
-  # gerade ausfuehrt. Semaphore haelt ausserdem die Schluessel zu allen
-  # Gaesten -- das verdient eine eigene Grenze.
+  # NetBox: Dokumentation des Netzes, befuellt aus OpenTofu (netbox/) und
+  # Ansible. Docker im Container braucht nesting. Beim Anlegen genuegt dafuer
+  # das API-Token: Der Provider schickt dann nur "nesting=1", und PVE erlaubt
+  # nesting bei unprivilegierten Containern mit VM.Allocate. Ein SPAETERES
+  # Aendern der features dagegen schickt alle Flags mit (auch keyctl=0,
+  # fuse=0) und verlangt root@pam.
   #
-  # Der deb-Weg der Ansible-Rolle braucht kein nesting=1, also auch kein
-  # root@pam fuer den Provider.
-  "semaphore" = {
+  # Feste IP unterhalb des DHCP-Bereichs der FritzBox (.20 bis .200), damit
+  # sie nie an ein anderes Geraet vergeben wird.
+  "netbox" = {
     template_file_id = "local:vztmpl/debian-13-standard_13.6-1_amd64.tar.zst"
     os_type          = "debian"
-    vm_id            = 521
-    description      = "Semaphore - Weboberflaeche fuer Ansible- und OpenTofu-Laeufe"
+    vm_id            = 540
+    description      = "NetBox - Dokumentation des Netzes"
     cpu_cores        = 2
-    memory           = 2048
+    memory           = 3072
     swap             = 512
     disk_size        = 16
-    tags             = ["semaphore", "ansible", "opentofu", "debian", "lxc"]
+    features         = { nesting = true }
+    tags             = ["netbox", "opentofu", "debian", "lxc"]
 
-    # Feste IP: Sie steht im Ansible-Inventar und muss ausserhalb des
-    # DHCP-Bereichs liegen.
     ip_configs = [{
-      ipv4_address = "192.168.178.63/24"
+      ipv4_address = "192.168.178.11/24"
       ipv4_gateway = "192.168.178.1"
     }]
   }
@@ -243,7 +261,7 @@ containers = {
   #   memory    = 1024
   #   disk_size = 16
   #
-  #   # nesting braucht root@pam - mit einem API-Token lehnt PVE das ab.
+  #   # nesting geht beim Anlegen auch mit dem API-Token (siehe "netbox").
   #   # features = { nesting = true }
   # }
 }
