@@ -408,9 +408,10 @@ Katalog steht, bricht der Plan mit einer entsprechenden Meldung ab.
   bleibt auf ihrer Platte, sonst bräche jede neue Image-Fassung alle VMs ab.
   Soll eine VM wirklich aus dem neuen Image neu entstehen:
   `tofu apply -replace='module.vm["<name>"].proxmox_virtual_environment_vm.this'`.
-- Der State liegt standardmäßig lokal in `terraform.tfstate` und enthält
-  Zugangsdaten — nicht einchecken (ist per `.gitignore` ausgeschlossen). Für den
-  Mehrbenutzerbetrieb den Backend-Block in `versions.tf` ausfüllen.
+- Der State liegt **nicht** lokal, sondern in Silo auf CT 520 (siehe
+  [State-Backend](#state-backend)). Lokal ist nur der State von `bootstrap/`
+  (`bootstrap/terraform.tfstate`). Der enthält das API-Token im Klartext:
+  mitsichern, nicht einchecken (ist per `.gitignore` ausgeschlossen).
 
 Speziell auf `procmox`:
 
@@ -463,52 +464,66 @@ Speziell für LXC:
 
 ## State-Backend
 
-Standardmaessig liegt der State als `terraform.tfstate` neben dem Code. Lokal
-ist das in Ordnung. Fuer Semaphore nicht: Ein Runner bekommt pro Lauf ein
-frisches Arbeitsverzeichnis, der State ist danach weg, und der naechste
-Durchgang wuerde VM und Container ein zweites Mal anlegen wollen.
+Der State liegt in **Silo** auf CT 520, Bucket `tofu-state`, Schlüssel
+`proxmox/terraform.tfstate`, mit Versionierung: Jeder Stand bleibt als
+eigene Version erhalten. Silo ist eine gepflegte Abspaltung von MinIO
+([pgsty/silo](https://github.com/pgsty/silo)) und hat dort am 18.11.2026 das
+alte MinIO abgelöst, mit denselben Daten und Zugängen. Für OpenTofu ist es
+dasselbe S3; der Backend-Block in `versions.tf` ist unverändert.
 
-Die Loesung hier ist ein MinIO-Container auf derselben Node. `bootstrap/`
-stellt ihn hin (eigener, lokaler State - die Begruendung steht dort), MinIO
-nimmt danach den State aller anderen Ressourcen auf.
+Lokal wäre bequemer, geht aber nicht für Semaphore: Ein Runner bekommt pro
+Lauf ein frisches Arbeitsverzeichnis, der State wäre danach weg, und der
+nächste Durchgang würde VM und Container ein zweites Mal anlegen wollen.
 
-**Reihenfolge** (Schritt 1 und 2 sind erledigt, der Block in `versions.tf`
-ist aktiv):
+**Zugang.** OpenTofu meldet sich mit einem eigenen Dienstzugang an, nie mit
+dem Root-Zugang von Silo. Der Dienstzugang darf nur den Bucket `tofu-state`
+lesen und beschreiben und keine alten Versionen löschen. Die Werte stehen im
+Ansible-Vault (`vault_minio_tofu_access_key`, `vault_minio_tofu_secret_key`)
+und gehören vor jedem Lauf in die Umgebung:
 
-1. `bootstrap/` ausfuehren -> siehe
-   [bootstrap/README.md](bootstrap/README.md)
-2. MinIO mit Ansible einrichten:
+```powershell
+$env:AWS_ACCESS_KEY_ID     = '...'
+$env:AWS_SECRET_ACCESS_KEY = '...'
+tofu plan
+```
+
+Ohne die beiden meldet `tofu` beim Zugriff auf den State einen Fehler über
+fehlende Zugangsdaten, auch bei `tofu state pull`.
+
+**Weboberfläche:** `https://silo.lab.home.arpa`, Anmeldung über Authelia
+(Gruppe `homelab_admins`). Dort sind unter dem Bucket auch die älteren
+Versionen des States zu sehen. Die S3-Schnittstelle selbst
+(`http://192.168.178.62:9000`) läuft nicht über Traefik und ist nur im LAN
+erreichbar.
+
+**Eingerichtet** wurde das einmal so, für einen Neuaufbau in dieser
+Reihenfolge:
+
+1. `bootstrap/` ausführen, siehe [bootstrap/README.md](bootstrap/README.md).
+2. Silo mit Ansible einrichten:
    `ansible-playbook playbooks/minio-setup.yml --ask-vault-pass`.
-   Das legt Dienst, Bucket, Versionierung und den Dienstzugang an. Von Hand
-   geht es nicht mehr: dl.min.io antwortet mit HTTP 410 Gone.
-3. Zugangsdaten in die Umgebung legen und den vorhandenen State umziehen:
-
-   ```powershell
-   $env:AWS_ACCESS_KEY_ID     = '...'
-   $env:AWS_SECRET_ACCESS_KEY = '...'
-   tofu init -migrate-state
-   ```
-
-   OpenTofu fragt, ob der lokale State in den Bucket soll. `yes`.
-
-Danach ist `terraform.tfstate` lokal nur noch eine Leiche - erst loeschen,
-wenn ein `tofu plan` gegen den Bucket sauber durchlaeuft und **keine**
-Aenderungen anzeigt. Zeigt er welche an, ist etwas beim Umzug schiefgegangen;
-dann nicht applyen, sondern nachsehen.
+   Das legt Dienst, Bucket, Versionierung und den Dienstzugang an.
+3. Mit den Zugangsdaten in der Umgebung den vorhandenen State umziehen:
+   `tofu init -migrate-state`. OpenTofu fragt, ob der lokale State in den
+   Bucket soll: `yes`. Ein lokales `terraform.tfstate` ist danach nur noch
+   eine Leiche. Erst löschen, wenn `tofu plan` gegen den Bucket **keine**
+   Änderungen zeigt.
 
 **Sperren:** `use_lockfile = true` legt waehrend eines Laufs eine Lock-Datei
 im Bucket ab. Damit koennen dein Arbeitsplatz und Semaphore nicht gleichzeitig
 schreiben. Das braucht OpenTofu >= 1.10; `tofu version` sagt, was du hast.
 
-> Das funktioniert mit MinIO, aber ueber einen Umweg, den man kennen sollte.
-> OpenTofu schickt `PutObject` mit `If-None-Match: "*"`. Liegt die Sperrdatei
-> schon, antwortet MinIO mit **304 Not Modified**, wo S3 **412 Precondition
-> Failed** vorschreibt. Es fällt nicht auf, weil OpenTofu nicht auf einen
-> bestimmten Code prueft, sondern jeden Fehler beim Schreiben als "Sperre
-> liegt schon" behandelt — und 304 ist fuer das AWS-SDK ein Fehler. Es
-> scheitert also in der sicheren Richtung. Erwarte nur eine merkwuerdig
-> formulierte Meldung, wenn zwei Laeufe wirklich kollidieren. Nachgelesen in
-> beiden Quelltexten, nicht praktisch erprobt.
+> OpenTofu schickt `PutObject` mit `If-None-Match: "*"`. Liegt die
+> Sperrdatei schon, antworten MinIO und Silo mit **412 Precondition Failed**,
+> wie S3 es vorschreibt, und der zweite Lauf bricht mit dem Hinweis auf die
+> Sperre ab. Nachgelesen in `checkPreconditionsPUT`
+> (`cmd/object-handlers-common.go`) von MinIO `RELEASE.2024-12-18T13-15-44Z`
+> und Silo, nicht praktisch erprobt.
+>
+> Eine frühere Fassung dieses Abschnitts behauptete hier **304 Not
+> Modified**. Das stammte aus dem Kommentar über dieser Stelle im Quelltext
+> („otherwise return a 304“), nicht aus dem Code darunter: Der liefert
+> `ErrPreconditionFailed`, und das ist HTTP 412.
 
 **Falls der Upload scheitert** mit einer Meldung ueber Checksummen oder
 `InvalidRequest`: `skip_s3_checksum = true` in den Backend-Block aufnehmen.
@@ -519,7 +534,8 @@ standardmaessig mitschickt.
 
 Das Repository liegt auf GitHub (`origin`) und soll zusätzlich auf dem eigenen
 Forgejo liegen. Forgejo läuft im LAN unter `git.lab.home.arpa`
-(→ `192.168.178.168`, Docker-Container auf LXC 103) und ist von außen nicht
+(Traefik auf LXC 103, `192.168.178.168`, reicht den Namen an den LXC `forgejo`
+weiter, 106, `192.168.178.28:3000`) und ist von außen nicht
 erreichbar — diese Schritte laufen also auf einem Rechner im Heimnetz.
 
 Das Gegenstück liegt dort unter `homelab/tofu` — der Besitzer in Forgejo ist
