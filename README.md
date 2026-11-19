@@ -501,12 +501,31 @@ nächste Durchgang würde VM und Container ein zweites Mal anlegen wollen.
 dem Root-Zugang von Silo. Der Dienstzugang darf nur den Bucket `tofu-state`
 lesen und beschreiben und keine alten Versionen löschen. Die Werte stehen im
 Ansible-Vault (`vault_minio_tofu_access_key`, `vault_minio_tofu_secret_key`)
-und gehören vor jedem Lauf in die Umgebung:
+und gehören vor jedem Lauf in die Umgebung. Am einfachsten mit `env.ps1`
+im Wurzelverzeichnis; es fragt Silo-Secret und NetBox-Token verdeckt ab und
+zeigt zur Kontrolle Länge und Kurz-Hash, nie den Wert:
 
 ```powershell
-$env:AWS_ACCESS_KEY_ID     = '...'
-$env:AWS_SECRET_ACCESS_KEY = '...'
+.\env.ps1          # nur was in diesem Fenster noch fehlt
+.\env.ps1 -Neu     # alles neu abfragen
 tofu plan
+```
+
+Die Variablen gelten nur im jeweiligen Fenster. Verweigert Windows das
+Skript ("Ausführung von Skripts ist auf diesem System deaktiviert"), einmal
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. Von Hand geht es
+auch:
+
+```powershell
+$env:AWS_ACCESS_KEY_ID     = 'tofu-state'
+$env:AWS_SECRET_ACCESS_KEY = '...'
+```
+
+Den Kurz-Hash mit dem Vault vergleichen (auf CT 112), wenn Silo mit
+`SignatureDoesNotMatch` ablehnt:
+
+```bash
+ansible minio -m debug -a "msg='{{ (vault_minio_tofu_secret_key | hash(\"sha256\"))[:8] }}'" --ask-vault-pass
 ```
 
 Ohne die beiden meldet `tofu` beim Zugriff auf den State einen Fehler über
