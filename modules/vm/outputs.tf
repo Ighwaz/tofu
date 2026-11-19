@@ -22,3 +22,8 @@ output "mac_addresses" {
   description = "MAC-Adressen der Netzwerkkarten."
   value       = proxmox_virtual_environment_vm.this.mac_addresses
 }
+
+output "network_mac_addresses" {
+  description = "MAC-Adressen aus der Konfiguration der Netzwerkkarten, in der Reihenfolge von network_devices. Anders als mac_addresses ohne Guest-Agent und ohne Loopback."
+  value       = [for device in proxmox_virtual_environment_vm.this.network_device : device.mac_address]
+}

@@ -59,3 +59,15 @@ jobs:
           cd bootstrap
           tofu init -backend=false
           tofu validate
+
+      - name: tofu validate (netbox)
+        run: |
+          cd netbox
+          tofu init -backend=false
+          tofu validate
+
+      # Prueft die Form des Outputs netbox_inventory, den netbox/ liest.
+      # Laeuft mit einem nachgebildeten Proxmox-Provider, braucht also
+      # keinen Zugang zu PVE.
+      - name: tofu test
+        run: tofu test
