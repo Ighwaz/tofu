@@ -1,0 +1,47 @@
+# Nach terraform.tfvars kopieren und anpassen. Die Datei wird nicht
+# eingecheckt (.gitignore). Der API-Token gehoert NICHT hier hinein, sondern
+# in die Umgebung: $env:NETBOX_API_TOKEN = '...'
+
+# netbox_url = "https://netbox.lab.home.arpa"
+
+# Nur noetig, wenn der Rechner der CA hinter Traefik nicht systemweit vertraut
+# (Fehler "x509: certificate signed by unknown authority"):
+# netbox_ca_cert_file = "C:/Users/<du>/lab-ca.crt"
+
+# site_name    = "Zuhause"
+# cluster_name = "procmox"
+# prefix       = "192.168.178.0/24"
+# dhcp_range   = { start = "192.168.178.20/24", end = "192.168.178.200/24" }
+
+# Physische Geraete. Hersteller, Modelle und Rollen entstehen aus diesen
+# Angaben. Adressen immer mit Praefixlaenge.
+devices = {
+  fritzbox = {
+    role         = "Router"
+    manufacturer = "AVM"
+    model        = "FRITZ!Box 7590"
+    ipv4         = "192.168.178.1/24"
+    mac          = "00:00:00:00:00:01"
+    dns_name     = "fritz.box"
+  }
+
+  # Der Proxmox-Host: Name wie der Node in Proxmox, hosts_guests = true.
+  procmox = {
+    role           = "Server"
+    manufacturer   = "Eigenbau"
+    model          = "Proxmox-Host"
+    ipv4           = "192.168.178.10/24"
+    mac            = "00:00:00:00:00:02"
+    interface      = "vmbr0"
+    interface_type = "bridge"
+    hosts_guests   = true
+  }
+
+  switch = {
+    role         = "Switch"
+    manufacturer = "TP-Link"
+    model        = "TL-SG105E"
+    ipv4         = "192.168.178.123/24"
+    mac          = "00:00:00:00:00:03"
+  }
+}

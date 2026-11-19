@@ -27,10 +27,16 @@ Provider: [`bpg/proxmox`](https://search.opentofu.org/provider/bpg/proxmox/lates
 ├── containers.tf            # Template-Download + Aufruf des LXC-Moduls je Container
 ├── outputs.tf               # VMIDs, IP-Adressen
 ├── terraform.tfvars.example # Beispielkonfiguration zum Kopieren
-└── modules/
-    ├── vm/                  # Wiederverwendbares Modul für eine cloud-init-VM
-    └── lxc/                 # Wiederverwendbares Modul für einen LXC-Container
+├── tests/                   # tofu test: Form des Outputs netbox_inventory
+├── modules/
+│   ├── vm/                  # Wiederverwendbares Modul für eine cloud-init-VM
+│   └── lxc/                 # Wiederverwendbares Modul für einen LXC-Container
+├── bootstrap/               # Silo-Container für den State (eigener, lokaler State)
+└── netbox/                  # Trägt Geräte und Gäste in NetBox ein (eigener State)
 ```
+
+Nach einem `apply` hier einmal in `netbox/` anwenden, damit NetBox den Stand
+kennt, siehe [netbox/README.md](netbox/README.md).
 
 ## Voraussetzungen auf dem Proxmox-Host
 

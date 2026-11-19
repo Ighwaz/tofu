@@ -12,3 +12,8 @@ output "node_name" {
   description = "PVE-Node auf dem der Container laeuft."
   value       = proxmox_virtual_environment_container.this.node_name
 }
+
+output "mac_addresses" {
+  description = "MAC-Adressen der Netzwerkkarten, in der Reihenfolge von network_interfaces (Proxmox vergibt sie, wenn keine gesetzt ist)."
+  value       = [for nic in proxmox_virtual_environment_container.this.network_interface : nic.mac_address]
+}
