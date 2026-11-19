@@ -49,9 +49,7 @@ State des Hauptverzeichnisses.
 Zugang wie im Hauptverzeichnis, dazu der Token:
 
 ```powershell
-$env:AWS_ACCESS_KEY_ID     = '...'   # derselbe Dienstzugang wie oben
-$env:AWS_SECRET_ACCESS_KEY = '...'
-$env:NETBOX_API_TOKEN      = '...'
+.\env.ps1    # im Wurzelverzeichnis: Silo-Zugang und NetBox-Token
 
 cd netbox
 tofu init
