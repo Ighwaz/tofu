@@ -59,6 +59,13 @@ tofu plan -out=tfplan
 tofu apply tfplan
 ```
 
+Beim ersten Lauf legt OpenTofu viele Objekte auf einmal an. Laufen dabei
+Anfragen in die Wartezeit (`context deadline exceeded`), mit weniger
+gleichzeitigen Anfragen weitermachen: `tofu apply -parallelism=3 tfplan`.
+Vorher in NetBox nachsehen, ob die gemeldeten Objekte doch angelegt wurden,
+und sie dann loeschen - sonst scheitert der naechste Versuch an "existiert
+bereits".
+
 **Nach jedem `apply` im Hauptverzeichnis** hier einmal `plan`/`apply`, sonst
 hinkt NetBox hinterher. Ein Gast, der im Hauptverzeichnis verschwindet,
 verschwindet hier beim nächsten Lauf aus NetBox.

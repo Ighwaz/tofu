@@ -10,6 +10,12 @@ provider "netbox" {
   # ihr nicht systemweit, hier den Pfad zum CA-Zertifikat (nur dem
   # oeffentlichen Teil) angeben.
   ca_cert_file = var.netbox_ca_cert_file
+
+  # Vorgabe des Providers sind 10 s. NetBox auf CT 540 laeuft mit zwei
+  # Workern; schickt OpenTofu zehn Anfragen gleichzeitig, warten die letzten
+  # laenger. Am 19.11.2026 brach der erste apply so nach 10 s ab, obwohl
+  # NetBox die Objekte danach noch angelegt hat.
+  request_timeout = var.netbox_request_timeout
 }
 
 # Den Zustand des Haupt-Roots lesen: Daraus kommen die Gaeste. Entfaellt, wenn
