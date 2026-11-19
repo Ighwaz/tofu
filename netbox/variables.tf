@@ -14,6 +14,12 @@ variable "netbox_ca_cert_file" {
   default     = null
 }
 
+variable "netbox_request_timeout" {
+  description = "Wartezeit je Anfrage an NetBox in Sekunden (Provider-Vorgabe: 10)."
+  type        = number
+  default     = 60
+}
+
 variable "state_endpoint" {
   description = "S3-Endpunkt mit dem State des Haupt-Roots (Silo)."
   type        = string
